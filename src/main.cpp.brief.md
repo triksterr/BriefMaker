@@ -7,7 +7,6 @@ File: main.cpp
 Стр: 15
 
 # Class: BriefEntity
- Пример комментария для структуры ("Class", "Function", "Method", "Macro", "Constant", "TypeAlias")
 Стр: 19 - 28
 
 # Class: Comment
@@ -25,12 +24,25 @@ File: main.cpp
 ## Function: std::string CleanUpSignature(const std::string& rawSig)
 Стр: 73 - 84
 
+## Function: std::string TrimString(const std::string& s)
+FIX: Добавлена вспомогательная функция для тримминга строк
+Стр: 87 - 92
+
 # Class: BriefGenerator
-Стр: 86 - 315
+Стр: 94 - 363
+
+## Method: BriefGenerator::void CollectComments(TSNode node)
+Стр: 100 - 114
+
+## Method: BriefGenerator::void ProcessNode(TSNode node, const std::string& currentPrefix)
+Стр: 116 - 245
+
+## Method: BriefGenerator::void AttachComments()
+Стр: 247 - 362
 
 ## Function: std::string GenerateMarkdown(const std::string& filePath, const std::vector<BriefEntity>& entities)
-Стр: 317 - 346
+Стр: 365 - 394
 
 ## Function: int main(int argc, char* argv[])
-Стр: 348 - 413
+Стр: 396 - 463
 

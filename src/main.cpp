@@ -16,7 +16,7 @@ extern "C" const TSLanguage *tree_sitter_javascript(void);
 
 namespace fs = std::filesystem;
 
-struct BriefEntity {		// Пример комментария для структуры ("Class", "Function", "Method", "Macro", "Constant", "TypeAlias")
+struct BriefEntity {
     std::string type;      // "Class", "Function", "Method", "Macro", "Constant", "TypeAlias"
     std::string prefix;    // e.g. "MyClass::"
     std::string signature; // e.g. "void myMethod(int arg)"
@@ -83,6 +83,14 @@ std::string CleanUpSignature(const std::string& rawSig) {
     return sig;
 }
 
+// FIX: Добавлена вспомогательная функция для тримминга строк
+std::string TrimString(const std::string& s) {
+    size_t start = s.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    size_t end = s.find_last_not_of(" \t\r\n");
+    return s.substr(start, end - start + 1);
+}
+
 class BriefGenerator {
 public:
     std::vector<BriefEntity> entities;
@@ -123,8 +131,8 @@ public:
                 }
             }
             std::string newPrefix = currentPrefix + name + "::";
-            uint32_t count2 = ts_node_child_count(node);
-            for (uint32_t i = 0; i < count2; i++) {
+            // FIX: Спускаемся в тело неймспейса (declaration_list)
+            for (uint32_t i = 0; i < count; i++) {
                 ProcessNode(ts_node_child(node, i), newPrefix);
             }
         }
@@ -161,10 +169,8 @@ public:
             for (uint32_t i = 0; i < count; i++) {
                 TSNode child = ts_node_child(node, i);
                 const char* childType = ts_node_type(child);
-                // Ищем тело функции
                 if (strcmp(childType, "compound_statement") == 0 || 
-                    strcmp(childType, "try_statement") == 0 ||
-                    strcmp(childType, "delete_statement") == 0) { // На случай "= delete;"
+                    strcmp(childType, "try_statement") == 0) {
                     body = child;
                     break;
                 }
@@ -173,7 +179,7 @@ public:
             int sigEndLine = startLine;
             if (!ts_node_is_null(body)) {
                 sig = code.substr(startByte, ts_node_start_byte(body) - startByte);
-                sigEndLine = ts_node_start_point(body).row + 1; // Строка перед '{'
+                sigEndLine = ts_node_start_point(body).row + 1;
             } else {
                 sig = GetNodeText(node, code);
             }
@@ -225,8 +231,12 @@ public:
             entities.push_back(e);
         }
 
-        // Рекурсивный спуск для корня, неймспейсов и extern "C" блоков
-        if (strcmp(type, "translation_unit") == 0 || strcmp(type, "linkage_specification") == 0) {
+        // FIX: Рекурсивный спуск для всех контейнеров (включая declaration_list и field_declaration_list)
+        if (strcmp(type, "translation_unit") == 0 || 
+            strcmp(type, "linkage_specification") == 0 ||
+            strcmp(type, "declaration_list") == 0 ||
+            strcmp(type, "field_declaration_list") == 0 ||
+            strcmp(type, "base_class_clause") == 0) {
             uint32_t count = ts_node_child_count(node);
             for (uint32_t i = 0; i < count; i++) {
                 ProcessNode(ts_node_child(node, i), currentPrefix);
@@ -235,75 +245,113 @@ public:
     }
 
     void AttachComments() {
+        // Сортируем комментарии по startByte для удобного поиска
+        std::sort(comments.begin(), comments.end(), [](const Comment& a, const Comment& b) {
+            return a.startByte < b.startByte;
+        });
+
         for (auto& e : entities) {
-            std::string topComment = "";
-            // Ищем комментарии строго перед startByte сущности
+            std::vector<std::string> topCommentTexts;
+            std::string inlineComment = "";
+
+            // 1. Ищем комментарии НАД сущностью
             for (int i = (int)comments.size() - 1; i >= 0; i--) {
                 const auto& c = comments[i];
                 if (c.endByte < e.startByte) {
                     if (e.startLine - c.endLine <= 1) {
-                        topComment = c.text + "\n" + topComment;
+                        topCommentTexts.push_back(c.text);
                     } else {
                         break; 
                     }
-                } else if (c.endByte >= e.endByte) {
-                    continue;
-                } else {
-                    break;
                 }
             }
-            
-            std::string cleanTop = "";
-            std::istringstream iss(topComment);
-            std::string line;
-            while(std::getline(iss, line)) {
-                line.erase(0, line.find_first_not_of(" \t"));
-                if (line.substr(0, 2) == "//") {
-                    cleanTop += line.substr(2) + "\n";
-                } else if (line.substr(0, 2) == "/*") {
-                    line = line.substr(2);
-                    if (line.length() > 0 && line.back() == '/') line.pop_back();
-                    if (line.length() > 0 && line.back() == '*') line.pop_back();
-                    cleanTop += line + "\n";
-                } else {
-                    cleanTop += line + "\n";
-                }
-            }
-            if (!cleanTop.empty()) cleanTop.pop_back(); 
-            
-            // Инлайн-комментарий (на той же строке, где заканчивается сигнатура/начинается тело)
-            std::string inlineComment = "";
-            // Для функций ищем на строке тела, для однострочных - на строке объявления
-            int targetLine = (e.type == "Function" || e.type == "Method") ? e.endLine : e.startLine; 
-            // Уточнение: лучше искать на строке перед телом, если это функция
-            // Но для простоты возьмем строку, где заканчивается сигнатура (startLine или строка с '{')
-            
+            std::reverse(topCommentTexts.begin(), topCommentTexts.end());
+
+            // 2. Ищем инлайн-комментарий
+            // FIX: Ищем на endLine сущности, после endByte (для однострочных функций после '}' или ';')
+            // Или на startLine (для многострочных, если комментарий стоит сразу после сигнатуры перед '{')
             for (const auto& c : comments) {
-                // Ищем комментарий, который находится ПОСЛЕ начала сущности, но на той же строке, что и начало
-                if (c.startLine == e.startLine && c.startByte > e.startByte) {
+                // Вариант A: Инлайн после конца сущности на той же строке
+                if (c.startLine == e.endLine && c.startByte > e.endByte) {
                     inlineComment = c.text;
                     break;
                 }
-                // Для многострочных функций инлайн может быть на строке с '{'
-                if (e.type == "Function" || e.type == "Method") {
-                     if (c.startLine > e.startLine && c.startLine <= e.endLine && c.startByte > e.startByte) {
-                         // Проверяем, есть ли между startByte и комментарием только пробелы и '{'
-                         std::string between = code.substr(e.startByte, c.startByte - e.startByte);
-                         std::regex nonSpaceRegex("[^\\s\\{\\}]");
-                         if (!std::regex_search(between, nonSpaceRegex)) {
-                             inlineComment = c.text;
-                             break;
-                         }
-                     }
+                // Вариант B: Инлайн внутри заголовка функции (перед '{' на той же строке)
+                if ((e.type == "Function" || e.type == "Method") && 
+                    c.startLine == e.startLine && c.startByte > e.startByte && c.startByte < e.endByte) {
+                    inlineComment = c.text;
+                    break;
                 }
             }
-            
-            std::string cleanInline = "";
-            if (!inlineComment.empty()) {
-                if (inlineComment.substr(0, 2) == "//") cleanInline = inlineComment.substr(2);
-                else cleanInline = inlineComment;
+
+            // 3. Очищаем верхние комментарии (Doxygen, /* */, //)
+            std::string cleanTop = "";
+            bool inBlockComment = false;
+            for (const auto& rawComment : topCommentTexts) {
+                std::vector<std::string> lines;
+                std::istringstream iss(rawComment);
+                std::string line;
+                while(std::getline(iss, line)) {
+                    lines.push_back(line);
+                }
+
+                for (auto& l : lines) {
+                    l = TrimString(l);
+                    if (l.empty()) continue;
+
+                    if (l.substr(0, 3) == "///") {
+                        cleanTop += TrimString(l.substr(3)) + "\n";
+                    } else if (l.substr(0, 2) == "//") {
+                        cleanTop += TrimString(l.substr(2)) + "\n";
+                    } else if (l.find("/*") != std::string::npos) {
+                        inBlockComment = true;
+                        size_t startIdx = l.find("/*");
+                        std::string text = l.substr(startIdx + 2);
+                        if (!text.empty() && (text[0] == '*' || text[0] == '!')) {
+                            text = text.substr(1);
+                        }
+                        size_t endIdx = text.find("*/");
+                        if (endIdx != std::string::npos) {
+                            text = text.substr(0, endIdx);
+                            inBlockComment = false;
+                        }
+                        text = TrimString(text);
+                        if (!text.empty()) cleanTop += text + "\n";
+                    } else if (l.find("*/") != std::string::npos) {
+                        inBlockComment = false;
+                        size_t endIdx = l.find("*/");
+                        std::string text = l.substr(0, endIdx);
+                        if (!text.empty() && text[0] == '*') text = text.substr(1);
+                        text = TrimString(text);
+                        if (!text.empty()) cleanTop += text + "\n";
+                    } else if (inBlockComment) {
+                        std::string text = l;
+                        if (!text.empty() && text[0] == '*') text = text.substr(1);
+                        text = TrimString(text);
+                        if (!text.empty()) cleanTop += text + "\n";
+                    }
+                }
+            }
+            if (!cleanTop.empty() && cleanTop.back() == '\n') {
+                cleanTop.pop_back();
             }
 
+            // 4. Очищаем инлайн
+            std::string cleanInline = "";
+            if (!inlineComment.empty()) {
+                std::string c = inlineComment;
+                if (c.substr(0, 2) == "//") {
+                    c = c.substr(2);
+                } else if (c.substr(0, 2) == "/*") {
+                    c = c.substr(2);
+                    if (c.length() >= 2 && c.substr(c.length()-2) == "*/") {
+                        c = c.substr(0, c.length()-2);
+                    }
+                }
+                cleanInline = TrimString(c);
+            }
+
+            // 5. Собираем итог
             e.comment = "";
             if (!cleanTop.empty()) e.comment += cleanTop;
             if (!cleanInline.empty()) {
@@ -358,11 +406,13 @@ int main(int argc, char* argv[]) {
 
     if (argc >= 3) {
         outputPath = argv[2];
-        if (outputPath.string().back() == '/' || outputPath.string().back() == '\\') {
+        std::string outStr = outputPath.string();
+        if (!outStr.empty() && (outStr.back() == '/' || outStr.back() == '\\')) {
             outputPath /= inputPath.filename().string() + ".brief.md";
         }
     } else {
-        outputPath = inputPath.string() + ".brief.md";
+        outputPath = inputPath;
+        outputPath.replace_extension(inputPath.extension().string() + ".brief.md");
     }
 
     if (!fs::exists(inputPath)) {
