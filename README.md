@@ -4,7 +4,7 @@
 [🇷🇺 Русская версия](#briefmaker-генератор-структурных-брифов-файлов-кода-для-ии-агентов) | [🇬🇧 English](#briefmaker-ai-friendly-code-indexer--ast-summarizer)
 
 ---
- 🇬🇧 
+# 🇬🇧 
 ## BriefMaker: AI-Friendly Code Indexer & AST Summarizer
 
 ### 🤔 The Problem
@@ -85,7 +85,7 @@ cmake --build build --config Release
 
 ---
 ---
- 🇷🇺 
+# 🇷🇺 
 ## BriefMaker: Генератор структурных брифов файлов кода для ИИ-агентов
 
 ### 🤔 Проблема
