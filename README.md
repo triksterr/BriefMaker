@@ -1,12 +1,11 @@
 # BriefMaker 🗺️
 **AI-Friendly Code Indexer & AST Summarizer for C++ and JavaScript**
 
-[🇷🇺 Русская версия](#-проблема) | [🇬🇧 English](#-the-problem)
+[🇷🇺 Русская версия](#briefmaker-генератор-структурных-брифов-файлов-кода-для-ии-агентов) | [🇬🇧 English](#briefmaker-ai-friendly-code-indexer--ast-summarizer)
 
 ---
-
-<a id="en"></a>
-## 🇬🇧 BriefMaker: AI-Friendly Code Indexer & AST Summarizer
+ 🇬🇧 
+## BriefMaker: AI-Friendly Code Indexer & AST Summarizer
 
 ### 🤔 The Problem
 Modern AI coding assistants (like Cursor, Cline, Aider, or custom LLM agents) are incredibly powerful, but they face a massive bottleneck: **Context Window Limits and Token Costs**. 
@@ -86,8 +85,8 @@ cmake --build build --config Release
 
 ---
 ---
-
-<h2 id="ru">🇷🇺 BriefMaker: Генератор структурных брифов файлов кода для ИИ-агентов</h2>
+ 🇷🇺 
+## BriefMaker: Генератор структурных брифов файлов кода для ИИ-агентов
 
 ### 🤔 Проблема
 Современные ИИ-ассистенты для разработчиков (Cursor, Cline, Aider или кастомные LLM-агенты) невероятно мощны, но они сталкиваются с серьезным ограничением: **лимиты контекстного окна и стоимость токенов**.
