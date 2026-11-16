@@ -15,40 +15,53 @@ File: test_comments.cpp
 Стр: 14
 
 # Class: TestClass
-@brief Класс для тестирования всех вариантов комментариев
-@author Test
+Класс для тестирования всех вариантов комментариев
 Стр: 20 - 59
 
-# Constant: TestClass::TestClass();
-@brief Конструктор по умолчанию
+## Field: TestClass::int publicField;
+Поле класса с Doxygen-комментарием
+Стр: 23
+
+## Method: TestClass::TestClass()
+Конструктор по умолчанию
 Многострочный Doxygen с пустыми строками внутри. | Инлайн после объявления конструктора
 Стр: 30
 
-# Constant: TestClass::~TestClass();
+## Method: TestClass::~TestClass()
 Обычный однострочный комментарий над деструктором
 Стр: 33
 
+## Method: TestClass::void normalMethod(int arg)
+Doxygen-комментарий в стиле Qt (с восклицательным знаком)
+Параметр arg: Параметр функции | Инлайн многострочный
+                                   комментарий после точки с запятой
+Стр: 39
+
 ## Method: TestClass::void oneLineMethod()
-Метод, записанный в одну строку | тело
+Метод, записанный в одну строку | Инлайн после однострочной функции
 Стр: 43
 
 ## Method: TestClass::int complexMethod( int arg1, int arg2 )
 Сложный метод с переносом сигнатуры
-@return Возвращаемое значение
+Возвращает: Возвращаемое значение
 Стр: 49 - 54
 
-## Function: int globalFunction(int x, int y)
+## Method: TestClass::void privateMethod()
+Приватный метод
+Стр: 58
+
+# Function: int globalFunction(int x, int y)
 Глобальная функция с полным Doxygen-описанием
-@param x Первый параметр
-@param y Второй параметр
-@return Сумма
+Параметр x: Первый параметр
+Параметр y: Второй параметр
+Возвращает: Сумма
 Стр: 67 - 69
 
-## Function: void shortFunc()
+# Function: void shortFunc()
 Глобальная функция в одну строку с инлайном | Короткий инлайн
 Стр: 72
 
-# Constant: void anotherFunc();
+# Function: void anotherFunc()
 Функция с обычным многострочным комментарием
 Стр: 77
 

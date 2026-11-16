@@ -17,7 +17,7 @@ extern "C" const TSLanguage *tree_sitter_javascript(void);
 namespace fs = std::filesystem;
 
 struct BriefEntity {
-    std::string type;      // "Class", "Function", "Method", "Macro", "Constant", "TypeAlias"
+    std::string type;      // "Class", "Function", "Method", "Macro", "Constant", "TypeAlias", "Field"
     std::string prefix;    // e.g. "MyClass::"
     std::string signature; // e.g. "void myMethod(int arg)"
     std::string comment;
@@ -83,12 +83,60 @@ std::string CleanUpSignature(const std::string& rawSig) {
     return sig;
 }
 
-// FIX: Добавлена вспомогательная функция для тримминга строк
 std::string TrimString(const std::string& s) {
     size_t start = s.find_first_not_of(" \t\r\n");
     if (start == std::string::npos) return "";
     size_t end = s.find_last_not_of(" \t\r\n");
     return s.substr(start, end - start + 1);
+}
+
+// Функция для очистки Doxygen-тегов
+std::string CleanDoxygenLine(const std::string& line) {
+    std::string l = TrimString(line);
+    if (l.empty()) return "";
+
+    // Статические regex для производительности
+    static const std::regex briefRegex("^@brief\\s+(.*)", std::regex::icase);
+    static const std::regex detailsRegex("^@details\\s+(.*)", std::regex::icase);
+    static const std::regex paramRegex("^@param\\s+(\\w+)\\s*(.*)", std::regex::icase);
+    static const std::regex returnRegex("^@return\\s*(.*)", std::regex::icase);
+    static const std::regex dropRegex("^@(author|date|version|file|class|struct|namespace|def)\\b.*", std::regex::icase);
+    static const std::regex anyTagRegex("^@[a-zA-Z]+\\b.*");
+
+    std::smatch match;
+    if (std::regex_match(l, match, briefRegex) || std::regex_match(l, match, detailsRegex)) {
+        return match[1].str();
+    }
+    if (std::regex_match(l, match, paramRegex)) {
+        return "Параметр " + match[1].str() + ": " + match[2].str();
+    }
+    if (std::regex_match(l, match, returnRegex)) {
+        return "Возвращает: " + match[1].str();
+    }
+    if (std::regex_match(l, dropRegex) || std::regex_match(l, anyTagRegex)) {
+        return ""; // Полностью удаляем неизвестные или мета-теги
+    }
+    
+    return l;
+}
+
+// Проверка: является ли declaration/field_declaration объявлением функции/метода
+bool IsFunctionDeclaration(TSNode node, const std::string& code) {
+    uint32_t count = ts_node_child_count(node);
+    for (uint32_t i = 0; i < count; i++) {
+        TSNode child = ts_node_child(node, i);
+        const char* childType = ts_node_type(child);
+        if (strcmp(childType, "function_declarator") == 0) return true;
+        // Обработка указателей на функции: void (*funcPtr)();
+        if (strcmp(childType, "pointer_declarator") == 0 || 
+            strcmp(childType, "reference_declarator") == 0) {
+            uint32_t subCount = ts_node_child_count(child);
+            for (uint32_t j = 0; j < subCount; j++) {
+                if (strcmp(ts_node_type(ts_node_child(child, j)), "function_declarator") == 0) return true;
+            }
+        }
+    }
+    return false;
 }
 
 class BriefGenerator {
@@ -131,7 +179,6 @@ public:
                 }
             }
             std::string newPrefix = currentPrefix + name + "::";
-            // FIX: Спускаемся в тело неймспейса (declaration_list)
             for (uint32_t i = 0; i < count; i++) {
                 ProcessNode(ts_node_child(node, i), newPrefix);
             }
@@ -176,10 +223,8 @@ public:
                 }
             }
             
-            int sigEndLine = startLine;
             if (!ts_node_is_null(body)) {
                 sig = code.substr(startByte, ts_node_start_byte(body) - startByte);
-                sigEndLine = ts_node_start_point(body).row + 1;
             } else {
                 sig = GetNodeText(node, code);
             }
@@ -218,25 +263,44 @@ public:
             e.endByte = endByte;
             entities.push_back(e);
         }
-        else if (strcmp(type, "declaration") == 0) {
+        // ОБНОВЛЕНО: Обработка объявлений (declaration) и полей класса (field_declaration)
+        else if (strcmp(type, "declaration") == 0 || strcmp(type, "field_declaration") == 0) {
             std::string text = GetNodeText(node, code);
-            BriefEntity e;
-            e.type = "Constant"; 
-            e.prefix = currentPrefix;
-            e.signature = CleanUpSignature(text);
-            e.startLine = startLine;
-            e.endLine = startLine;
-            e.startByte = startByte;
-            e.endByte = endByte;
-            entities.push_back(e);
+            
+            if (IsFunctionDeclaration(node, code)) {
+                // Это объявление метода/функции без тела (например, void func();)
+                size_t lastSemi = text.find_last_of(';');
+                if (lastSemi != std::string::npos) {
+                    text = text.substr(0, lastSemi);
+                }
+                BriefEntity e;
+                e.type = (currentPrefix.empty() ? "Function" : "Method");
+                e.prefix = currentPrefix;
+                e.signature = CleanUpSignature(text);
+                e.startLine = startLine;
+                e.endLine = endLine;
+                e.startByte = startByte;
+                e.endByte = endByte;
+                entities.push_back(e);
+            } else {
+                // Это переменная, константа или поле класса
+                BriefEntity e;
+                e.type = (currentPrefix.empty() ? "Constant" : "Field");
+                e.prefix = currentPrefix;
+                e.signature = CleanUpSignature(text);
+                e.startLine = startLine;
+                e.endLine = endLine;
+                e.startByte = startByte;
+                e.endByte = endByte;
+                entities.push_back(e);
+            }
         }
 
-        // FIX: Рекурсивный спуск для всех контейнеров (включая declaration_list и field_declaration_list)
+        // Рекурсивный спуск для контейнеров
         if (strcmp(type, "translation_unit") == 0 || 
             strcmp(type, "linkage_specification") == 0 ||
             strcmp(type, "declaration_list") == 0 ||
-            strcmp(type, "field_declaration_list") == 0 ||
-            strcmp(type, "base_class_clause") == 0) {
+            strcmp(type, "field_declaration_list") == 0) {
             uint32_t count = ts_node_child_count(node);
             for (uint32_t i = 0; i < count; i++) {
                 ProcessNode(ts_node_child(node, i), currentPrefix);
@@ -245,7 +309,6 @@ public:
     }
 
     void AttachComments() {
-        // Сортируем комментарии по startByte для удобного поиска
         std::sort(comments.begin(), comments.end(), [](const Comment& a, const Comment& b) {
             return a.startByte < b.startByte;
         });
@@ -268,23 +331,25 @@ public:
             std::reverse(topCommentTexts.begin(), topCommentTexts.end());
 
             // 2. Ищем инлайн-комментарий
-            // FIX: Ищем на endLine сущности, после endByte (для однострочных функций после '}' или ';')
-            // Или на startLine (для многострочных, если комментарий стоит сразу после сигнатуры перед '{')
+            // Приоритет 1: Комментарий ПОСЛЕ конца сущности на той же строке (Вариант A)
             for (const auto& c : comments) {
-                // Вариант A: Инлайн после конца сущности на той же строке
                 if (c.startLine == e.endLine && c.startByte > e.endByte) {
-                    inlineComment = c.text;
-                    break;
-                }
-                // Вариант B: Инлайн внутри заголовка функции (перед '{' на той же строке)
-                if ((e.type == "Function" || e.type == "Method") && 
-                    c.startLine == e.startLine && c.startByte > e.startByte && c.startByte < e.endByte) {
                     inlineComment = c.text;
                     break;
                 }
             }
 
-            // 3. Очищаем верхние комментарии (Doxygen, /* */, //)
+            // Приоритет 2: Комментарий внутри заголовка функции (перед '{') (Вариант B)
+            if (inlineComment.empty() && (e.type == "Function" || e.type == "Method")) {
+                for (const auto& c : comments) {
+                    if (c.startLine == e.startLine && c.startByte > e.startByte && c.startByte < e.endByte) {
+                        inlineComment = c.text;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Очищаем верхние комментарии с учетом Doxygen
             std::string cleanTop = "";
             bool inBlockComment = false;
             for (const auto& rawComment : topCommentTexts) {
@@ -299,14 +364,19 @@ public:
                     l = TrimString(l);
                     if (l.empty()) continue;
 
-                    if (l.substr(0, 3) == "///") {
-                        cleanTop += TrimString(l.substr(3)) + "\n";
+                    std::string text = "";
+                    bool isCommentLine = false;
+
+                    if (l.substr(0, 3) == "///" || l.substr(0, 3) == "//!") {
+                        text = TrimString(l.substr(3));
+                        isCommentLine = true;
                     } else if (l.substr(0, 2) == "//") {
-                        cleanTop += TrimString(l.substr(2)) + "\n";
+                        text = TrimString(l.substr(2));
+                        isCommentLine = true;
                     } else if (l.find("/*") != std::string::npos) {
                         inBlockComment = true;
                         size_t startIdx = l.find("/*");
-                        std::string text = l.substr(startIdx + 2);
+                        text = l.substr(startIdx + 2);
                         if (!text.empty() && (text[0] == '*' || text[0] == '!')) {
                             text = text.substr(1);
                         }
@@ -316,19 +386,26 @@ public:
                             inBlockComment = false;
                         }
                         text = TrimString(text);
-                        if (!text.empty()) cleanTop += text + "\n";
+                        isCommentLine = true;
                     } else if (l.find("*/") != std::string::npos) {
                         inBlockComment = false;
                         size_t endIdx = l.find("*/");
-                        std::string text = l.substr(0, endIdx);
+                        text = l.substr(0, endIdx);
                         if (!text.empty() && text[0] == '*') text = text.substr(1);
                         text = TrimString(text);
-                        if (!text.empty()) cleanTop += text + "\n";
+                        isCommentLine = true;
                     } else if (inBlockComment) {
-                        std::string text = l;
+                        text = l;
                         if (!text.empty() && text[0] == '*') text = text.substr(1);
                         text = TrimString(text);
-                        if (!text.empty()) cleanTop += text + "\n";
+                        isCommentLine = true;
+                    }
+
+                    if (isCommentLine && !text.empty()) {
+                        std::string cleaned = CleanDoxygenLine(text);
+                        if (!cleaned.empty()) {
+                            cleanTop += cleaned + "\n";
+                        }
                     }
                 }
             }
@@ -370,14 +447,16 @@ std::string GenerateMarkdown(const std::string& filePath, const std::vector<Brie
         std::string prefix = e.prefix;
         std::string name = e.signature;
         
-        if (e.type == "Class") {
-            md << "# Class: " << prefix << name << "\n";
-        } else if (e.type == "Function" || e.type == "Method") {
-            md << "## " << e.type << ": " << prefix << name << "\n";
-        } else if (e.type == "Macro") {
-            md << "# " << e.type << " " << name << "\n";
-        } else if (e.type == "Constant" || e.type == "TypeAlias") {
-            md << "# " << e.type << ": " << prefix << name << "\n";
+        // Логика уровней заголовков: # для глобальных, ## для членов классов
+        std::string hashes = "#";
+        if (e.type == "Method" || e.type == "Field") {
+            hashes = "##";
+        }
+
+        if (e.type == "Macro") {
+            md << hashes << " Macro " << name << "\n";
+        } else {
+            md << hashes << " " << e.type << ": " << prefix << name << "\n";
         }
         
         if (!e.comment.empty()) {
