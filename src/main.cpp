@@ -77,22 +77,12 @@ std::string TrimString(const std::string& s) {
     return s.substr(start, end - start + 1);
 }
 
-std::string CleanUpSignature(const std::string& rawSig) {
+std::string RemoveInlineCommentsFromSignature(const std::string& rawSig) {
     std::string sig = rawSig;
     std::replace(sig.begin(), sig.end(), '\n', ' ');
     std::replace(sig.begin(), sig.end(), '\r', ' ');
-    
     std::regex wsRegex("\\s+");
     sig = std::regex_replace(sig, wsRegex, " ");
-    
-    sig.erase(0, sig.find_first_not_of(" \t"));
-    if (!sig.empty()) sig.erase(sig.find_last_not_of(" \t") + 1);
-    return sig;
-}
-
-// Новая функция: удаляет инлайн-комментарии из сигнатуры, учитывая строковые литералы
-std::string RemoveInlineCommentsFromSignature(const std::string& rawSig) {
-    std::string sig = CleanUpSignature(rawSig);
     
     bool inString = false;
     bool inChar = false;
@@ -101,8 +91,7 @@ std::string RemoveInlineCommentsFromSignature(const std::string& rawSig) {
     for (size_t i = 0; i < sig.length(); ++i) {
         char c = sig[i];
         if (!inString && !inChar) {
-            if (c == '"') { inString = true; stringChar = c; }
-            else if (c == '\'') { inChar = true; stringChar = c; }
+            if (c == '"' || c == '\'' || c == '`') { inString = true; stringChar = c; }
             else if (c == '/' && i + 1 < sig.length()) {
                 if (sig[i+1] == '/' || sig[i+1] == '*') {
                     return TrimString(sig.substr(0, i));
@@ -110,17 +99,16 @@ std::string RemoveInlineCommentsFromSignature(const std::string& rawSig) {
             }
         } else {
             if (c == stringChar) {
-                // Простая проверка на экранирование обратным слэшем
                 int backslashes = 0;
                 for (int j = (int)i - 1; j >= 0 && sig[j] == '\\'; --j) backslashes++;
                 if (backslashes % 2 == 0) {
-                    if (inString) inString = false;
-                    if (inChar) inChar = false;
+                    inString = false;
+                    inChar = false;
                 }
             }
         }
     }
-    return sig;
+    return TrimString(sig);
 }
 
 std::string CleanDoxygenLine(const std::string& line) {
@@ -139,7 +127,7 @@ std::string CleanDoxygenLine(const std::string& line) {
         return match[1].str();
     }
     if (std::regex_match(l, match, paramRegex)) {
-        return match[1].str() + ": " + match[2].str(); // Убрано "Параметр "
+        return match[1].str() + ": " + match[2].str();
     }
     if (std::regex_match(l, match, returnRegex)) {
         return "Возвращает: " + match[1].str();
@@ -173,6 +161,7 @@ public:
     std::vector<BriefEntity> entities;
     std::vector<Comment> comments;
     std::string code;
+    bool isJS = false; // Флаг для понимания, какой язык мы парсим
 
     void CollectComments(TSNode node) {
         if (strcmp(ts_node_type(node), "comment") == 0) {
@@ -197,6 +186,9 @@ public:
         uint32_t startByte = ts_node_start_byte(node);
         uint32_t endByte = ts_node_end_byte(node);
 
+        // ==========================================
+        // C++ СПЕЦИФИЧНЫЕ УЗЛЫ
+        // ==========================================
         if (strcmp(type, "namespace_definition") == 0) {
             std::string name = "";
             uint32_t count = ts_node_child_count(node);
@@ -261,7 +253,7 @@ public:
             BriefEntity e;
             e.type = (currentPrefix.empty() ? "Function" : "Method");
             e.prefix = currentPrefix;
-            e.signature = RemoveInlineCommentsFromSignature(sig); // Применяем очистку
+            e.signature = RemoveInlineCommentsFromSignature(sig);
             e.startLine = startLine;
             e.endLine = endLine;
             e.startByte = startByte;
@@ -272,7 +264,7 @@ public:
             std::string text = GetNodeText(node, code);
             BriefEntity e;
             e.type = "Macro";
-            e.signature = RemoveInlineCommentsFromSignature(text); // Обрезаем инлайн из макроса
+            e.signature = RemoveInlineCommentsFromSignature(text);
             e.startLine = startLine;
             e.endLine = endLine;
             e.startByte = startByte;
@@ -317,10 +309,188 @@ public:
             }
         }
 
+        // ==========================================
+        // JAVASCRIPT СПЕЦИФИЧНЫЕ УЗЛЫ
+        // ==========================================
+        else if (strcmp(type, "class_declaration") == 0) {
+            std::string name = "";
+            uint32_t count = ts_node_child_count(node);
+            for (uint32_t i = 0; i < count; i++) {
+                TSNode child = ts_node_child(node, i);
+                if (strcmp(ts_node_type(child), "identifier") == 0 || strcmp(ts_node_type(child), "type_identifier") == 0) {
+                    name = GetNodeText(child, code);
+                    break;
+                }
+            }
+            
+            BriefEntity e;
+            e.type = "Class";
+            e.prefix = currentPrefix;
+            e.signature = name;
+            e.startLine = startLine;
+            e.endLine = endLine;
+            e.startByte = startByte;
+            e.endByte = endByte;
+            entities.push_back(e);
+
+            std::string newPrefix = currentPrefix + name + "."; // В JS используем точку
+            for (uint32_t i = 0; i < count; i++) {
+                ProcessNode(ts_node_child(node, i), newPrefix);
+            }
+        }
+        else if (strcmp(type, "method_definition") == 0) {
+            std::string sig = "";
+            TSNode body = {0};
+            uint32_t count = ts_node_child_count(node);
+            for (uint32_t i = 0; i < count; i++) {
+                TSNode child = ts_node_child(node, i);
+                if (strcmp(ts_node_type(child), "statement_block") == 0) {
+                    body = child;
+                    break;
+                }
+            }
+            
+            if (!ts_node_is_null(body)) {
+                sig = code.substr(startByte, ts_node_start_byte(body) - startByte);
+            } else {
+                sig = GetNodeText(node, code);
+            }
+            
+            BriefEntity e;
+            e.type = "Method";
+            e.prefix = currentPrefix;
+            e.signature = RemoveInlineCommentsFromSignature(sig);
+            e.startLine = startLine;
+            e.endLine = endLine;
+            e.startByte = startByte;
+            e.endByte = endByte;
+            entities.push_back(e);
+        }
+        else if (strcmp(type, "function_declaration") == 0) {
+            std::string sig = "";
+            TSNode body = {0};
+            uint32_t count = ts_node_child_count(node);
+            for (uint32_t i = 0; i < count; i++) {
+                TSNode child = ts_node_child(node, i);
+                if (strcmp(ts_node_type(child), "statement_block") == 0) {
+                    body = child;
+                    break;
+                }
+            }
+            
+            if (!ts_node_is_null(body)) {
+                sig = code.substr(startByte, ts_node_start_byte(body) - startByte);
+            } else {
+                sig = GetNodeText(node, code);
+            }
+            
+            BriefEntity e;
+            e.type = "Function";
+            e.prefix = currentPrefix;
+            e.signature = RemoveInlineCommentsFromSignature(sig);
+            e.startLine = startLine;
+            e.endLine = endLine;
+            e.startByte = startByte;
+            e.endByte = endByte;
+            entities.push_back(e);
+        }
+        else if (strcmp(type, "lexical_declaration") == 0 || strcmp(type, "variable_declaration") == 0) {
+            uint32_t count = ts_node_child_count(node);
+            bool hasFunction = false;
+            
+            // Проверяем, есть ли среди деклараторов функции/стрелочные функции
+            for (uint32_t i = 0; i < count; i++) {
+                TSNode child = ts_node_child(node, i);
+                if (strcmp(ts_node_type(child), "variable_declarator") == 0) {
+                    uint32_t subCount = ts_node_child_count(child);
+                    for (uint32_t j = 0; j < subCount; j++) {
+                        TSNode val = ts_node_child(child, j);
+                        const char* valType = ts_node_type(val);
+                        if (strcmp(valType, "arrow_function") == 0 || 
+                            strcmp(valType, "function_expression") == 0 ||
+                            strcmp(valType, "generator_function") == 0) {
+                            hasFunction = true;
+                            break;
+                        }
+                    }
+                    if (hasFunction) break;
+                }
+            }
+            
+            if (hasFunction) {
+                // Извлекаем функции из деклараторов
+                for (uint32_t i = 0; i < count; i++) {
+                    TSNode child = ts_node_child(node, i);
+                    if (strcmp(ts_node_type(child), "variable_declarator") == 0) {
+                        std::string name = "";
+                        TSNode valueNode = {0};
+                        uint32_t subCount = ts_node_child_count(child);
+                        for (uint32_t j = 0; j < subCount; j++) {
+                            TSNode subChild = ts_node_child(child, j);
+                            const char* subType = ts_node_type(subChild);
+                            if (strcmp(subType, "identifier") == 0) {
+                                name = GetNodeText(subChild, code);
+                            } else if (strcmp(subType, "arrow_function") == 0 || 
+                                       strcmp(subType, "function_expression") == 0 ||
+                                       strcmp(subType, "generator_function") == 0) {
+                                valueNode = subChild;
+                            }
+                        }
+                        
+                        if (!ts_node_is_null(valueNode)) {
+                            std::string params = "";
+                            uint32_t vCount = ts_node_child_count(valueNode);
+                            for (uint32_t k = 0; k < vCount; k++) {
+                                TSNode vChild = ts_node_child(valueNode, k);
+                                if (strcmp(ts_node_type(vChild), "formal_parameters") == 0) {
+                                    params = GetNodeText(vChild, code);
+                                }
+                            }
+                            
+                            std::string sig = name + params;
+                            if (strcmp(ts_node_type(valueNode), "arrow_function") == 0) {
+                                sig += " =>";
+                            }
+                            
+                            BriefEntity e;
+                            e.type = (currentPrefix.empty() ? "Function" : "Method");
+                            e.prefix = currentPrefix;
+                            e.signature = RemoveInlineCommentsFromSignature(sig);
+                            e.startLine = ts_node_start_point(child).row + 1;
+                            e.endLine = ts_node_end_point(child).row + 1;
+                            e.startByte = ts_node_start_byte(child);
+                            e.endByte = ts_node_end_byte(child);
+                            entities.push_back(e);
+                        }
+                    }
+                }
+            } else {
+                // Просто переменные/константы
+                std::string text = GetNodeText(node, code);
+                BriefEntity e;
+                e.type = (currentPrefix.empty() ? "Constant" : "Field");
+                e.prefix = currentPrefix;
+                e.signature = RemoveInlineCommentsFromSignature(text);
+                e.startLine = startLine;
+                e.endLine = endLine;
+                e.startByte = startByte;
+                e.endByte = endByte;
+                entities.push_back(e);
+            }
+        }
+
+        // ==========================================
+        // РЕКУРСИВНЫЙ СПУСК (Контейнеры)
+        // ==========================================
         if (strcmp(type, "translation_unit") == 0 || 
             strcmp(type, "linkage_specification") == 0 ||
             strcmp(type, "declaration_list") == 0 ||
-            strcmp(type, "field_declaration_list") == 0) {
+            strcmp(type, "field_declaration_list") == 0 ||
+            // JS Контейнеры
+            strcmp(type, "program") == 0 ||
+            strcmp(type, "class_body") == 0 ||
+            strcmp(type, "export_statement") == 0 ||
+            strcmp(type, "export_default_declaration") == 0) {
             uint32_t count = ts_node_child_count(node);
             for (uint32_t i = 0; i < count; i++) {
                 ProcessNode(ts_node_child(node, i), currentPrefix);
@@ -428,7 +598,6 @@ public:
                 cleanTop.pop_back();
             }
 
-            // Обработка инлайн-комментария с разбивкой на строки и триммингом
             std::string cleanInline = "";
             if (!inlineComment.empty()) {
                 std::string c = inlineComment;
@@ -457,7 +626,6 @@ public:
                 if (!cleanInline.empty()) cleanInline.pop_back(); 
             }
 
-            // Сборка финального комментария БЕЗ разделителя "|"
             e.comment = "";
             if (!cleanTop.empty()) e.comment += cleanTop;
             if (!cleanInline.empty()) {
@@ -529,10 +697,13 @@ int main(int argc, char* argv[]) {
 
     std::string ext = inputPath.extension().string();
     const TSLanguage* lang = nullptr;
+    bool isJS = false;
+    
     if (ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".cc") {
         lang = tree_sitter_cpp();
     } else if (ext == ".js" || ext == ".jsx" || ext == ".ts") {
         lang = tree_sitter_javascript();
+        isJS = true;
     } else {
         std::cerr << "Неподдерживаемое расширение: " << ext << "\n";
         return 1;
@@ -549,6 +720,7 @@ int main(int argc, char* argv[]) {
 
         BriefGenerator gen;
         gen.code = code;
+        gen.isJS = isJS;
         gen.CollectComments(rootNode);
         gen.ProcessNode(rootNode, "");
         gen.AttachComments();
