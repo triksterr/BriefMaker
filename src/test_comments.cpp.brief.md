@@ -1,6 +1,6 @@
 File: test_comments.cpp
 
-# Macro #define MAX_VALUE 100 // Инлайн-комментарий к макросу
+# Macro #define MAX_VALUE 100
 Это Doxygen-комментарий к макросу.
 Он может быть многострочным.
 Стр: 7 - 8
@@ -22,23 +22,26 @@ File: test_comments.cpp
 Поле класса с Doxygen-комментарием
 Стр: 23
 
-## Method: TestClass::TestClass()
+## Method: TestClass::TestClass();
 Конструктор по умолчанию
-Многострочный Doxygen с пустыми строками внутри. | Инлайн после объявления конструктора
+Многострочный Doxygen с пустыми строками внутри.
+Инлайн после объявления конструктора
 Стр: 30
 
-## Method: TestClass::~TestClass()
+## Method: TestClass::~TestClass();
 Обычный однострочный комментарий над деструктором
 Стр: 33
 
-## Method: TestClass::void normalMethod(int arg)
+## Method: TestClass::void normalMethod(int arg);
 Doxygen-комментарий в стиле Qt (с восклицательным знаком)
-Параметр arg: Параметр функции | Инлайн многострочный
-                                   комментарий после точки с запятой
+arg: Параметр функции
+Инлайн многострочный
+комментарий после точки с запятой
 Стр: 39
 
 ## Method: TestClass::void oneLineMethod()
-Метод, записанный в одну строку | Инлайн после однострочной функции
+Метод, записанный в одну строку
+Инлайн после однострочной функции
 Стр: 43
 
 ## Method: TestClass::int complexMethod( int arg1, int arg2 )
@@ -46,22 +49,23 @@ Doxygen-комментарий в стиле Qt (с восклицательны
 Возвращает: Возвращаемое значение
 Стр: 49 - 54
 
-## Method: TestClass::void privateMethod()
+## Method: TestClass::void privateMethod();
 Приватный метод
 Стр: 58
 
 # Function: int globalFunction(int x, int y)
 Глобальная функция с полным Doxygen-описанием
-Параметр x: Первый параметр
-Параметр y: Второй параметр
+x: Первый параметр
+y: Второй параметр
 Возвращает: Сумма
 Стр: 67 - 69
 
 # Function: void shortFunc()
-Глобальная функция в одну строку с инлайном | Короткий инлайн
+Глобальная функция в одну строку с инлайном
+Короткий инлайн
 Стр: 72
 
-# Function: void anotherFunc()
+# Function: void anotherFunc();
 Функция с обычным многострочным комментарием
 Стр: 77
 

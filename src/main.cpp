@@ -17,9 +17,9 @@ extern "C" const TSLanguage *tree_sitter_javascript(void);
 namespace fs = std::filesystem;
 
 struct BriefEntity {
-    std::string type;      // "Class", "Function", "Method", "Macro", "Constant", "TypeAlias", "Field"
-    std::string prefix;    // e.g. "MyClass::"
-    std::string signature; // e.g. "void myMethod(int arg)"
+    std::string type;      
+    std::string prefix;    
+    std::string signature; 
     std::string comment;
     int startLine;
     int endLine;
@@ -70,6 +70,13 @@ std::string GetNodeText(TSNode node, const std::string& code) {
     return "";
 }
 
+std::string TrimString(const std::string& s) {
+    size_t start = s.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    size_t end = s.find_last_not_of(" \t\r\n");
+    return s.substr(start, end - start + 1);
+}
+
 std::string CleanUpSignature(const std::string& rawSig) {
     std::string sig = rawSig;
     std::replace(sig.begin(), sig.end(), '\n', ' ');
@@ -83,19 +90,43 @@ std::string CleanUpSignature(const std::string& rawSig) {
     return sig;
 }
 
-std::string TrimString(const std::string& s) {
-    size_t start = s.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos) return "";
-    size_t end = s.find_last_not_of(" \t\r\n");
-    return s.substr(start, end - start + 1);
+// Новая функция: удаляет инлайн-комментарии из сигнатуры, учитывая строковые литералы
+std::string RemoveInlineCommentsFromSignature(const std::string& rawSig) {
+    std::string sig = CleanUpSignature(rawSig);
+    
+    bool inString = false;
+    bool inChar = false;
+    char stringChar = 0;
+    
+    for (size_t i = 0; i < sig.length(); ++i) {
+        char c = sig[i];
+        if (!inString && !inChar) {
+            if (c == '"') { inString = true; stringChar = c; }
+            else if (c == '\'') { inChar = true; stringChar = c; }
+            else if (c == '/' && i + 1 < sig.length()) {
+                if (sig[i+1] == '/' || sig[i+1] == '*') {
+                    return TrimString(sig.substr(0, i));
+                }
+            }
+        } else {
+            if (c == stringChar) {
+                // Простая проверка на экранирование обратным слэшем
+                int backslashes = 0;
+                for (int j = (int)i - 1; j >= 0 && sig[j] == '\\'; --j) backslashes++;
+                if (backslashes % 2 == 0) {
+                    if (inString) inString = false;
+                    if (inChar) inChar = false;
+                }
+            }
+        }
+    }
+    return sig;
 }
 
-// Функция для очистки Doxygen-тегов
 std::string CleanDoxygenLine(const std::string& line) {
     std::string l = TrimString(line);
     if (l.empty()) return "";
 
-    // Статические regex для производительности
     static const std::regex briefRegex("^@brief\\s+(.*)", std::regex::icase);
     static const std::regex detailsRegex("^@details\\s+(.*)", std::regex::icase);
     static const std::regex paramRegex("^@param\\s+(\\w+)\\s*(.*)", std::regex::icase);
@@ -108,26 +139,24 @@ std::string CleanDoxygenLine(const std::string& line) {
         return match[1].str();
     }
     if (std::regex_match(l, match, paramRegex)) {
-        return "Параметр " + match[1].str() + ": " + match[2].str();
+        return match[1].str() + ": " + match[2].str(); // Убрано "Параметр "
     }
     if (std::regex_match(l, match, returnRegex)) {
         return "Возвращает: " + match[1].str();
     }
     if (std::regex_match(l, dropRegex) || std::regex_match(l, anyTagRegex)) {
-        return ""; // Полностью удаляем неизвестные или мета-теги
+        return ""; 
     }
     
     return l;
 }
 
-// Проверка: является ли declaration/field_declaration объявлением функции/метода
 bool IsFunctionDeclaration(TSNode node, const std::string& code) {
     uint32_t count = ts_node_child_count(node);
     for (uint32_t i = 0; i < count; i++) {
         TSNode child = ts_node_child(node, i);
         const char* childType = ts_node_type(child);
         if (strcmp(childType, "function_declarator") == 0) return true;
-        // Обработка указателей на функции: void (*funcPtr)();
         if (strcmp(childType, "pointer_declarator") == 0 || 
             strcmp(childType, "reference_declarator") == 0) {
             uint32_t subCount = ts_node_child_count(child);
@@ -228,12 +257,11 @@ public:
             } else {
                 sig = GetNodeText(node, code);
             }
-            sig = CleanUpSignature(sig);
-
+            
             BriefEntity e;
             e.type = (currentPrefix.empty() ? "Function" : "Method");
             e.prefix = currentPrefix;
-            e.signature = sig;
+            e.signature = RemoveInlineCommentsFromSignature(sig); // Применяем очистку
             e.startLine = startLine;
             e.endLine = endLine;
             e.startByte = startByte;
@@ -244,7 +272,7 @@ public:
             std::string text = GetNodeText(node, code);
             BriefEntity e;
             e.type = "Macro";
-            e.signature = CleanUpSignature(text);
+            e.signature = RemoveInlineCommentsFromSignature(text); // Обрезаем инлайн из макроса
             e.startLine = startLine;
             e.endLine = endLine;
             e.startByte = startByte;
@@ -256,38 +284,31 @@ public:
             BriefEntity e;
             e.type = "TypeAlias";
             e.prefix = currentPrefix;
-            e.signature = CleanUpSignature(text);
+            e.signature = RemoveInlineCommentsFromSignature(text);
             e.startLine = startLine;
             e.endLine = startLine;
             e.startByte = startByte;
             e.endByte = endByte;
             entities.push_back(e);
         }
-        // ОБНОВЛЕНО: Обработка объявлений (declaration) и полей класса (field_declaration)
         else if (strcmp(type, "declaration") == 0 || strcmp(type, "field_declaration") == 0) {
             std::string text = GetNodeText(node, code);
             
             if (IsFunctionDeclaration(node, code)) {
-                // Это объявление метода/функции без тела (например, void func();)
-                size_t lastSemi = text.find_last_of(';');
-                if (lastSemi != std::string::npos) {
-                    text = text.substr(0, lastSemi);
-                }
                 BriefEntity e;
                 e.type = (currentPrefix.empty() ? "Function" : "Method");
                 e.prefix = currentPrefix;
-                e.signature = CleanUpSignature(text);
+                e.signature = RemoveInlineCommentsFromSignature(text);
                 e.startLine = startLine;
                 e.endLine = endLine;
                 e.startByte = startByte;
                 e.endByte = endByte;
                 entities.push_back(e);
             } else {
-                // Это переменная, константа или поле класса
                 BriefEntity e;
                 e.type = (currentPrefix.empty() ? "Constant" : "Field");
                 e.prefix = currentPrefix;
-                e.signature = CleanUpSignature(text);
+                e.signature = RemoveInlineCommentsFromSignature(text);
                 e.startLine = startLine;
                 e.endLine = endLine;
                 e.startByte = startByte;
@@ -296,7 +317,6 @@ public:
             }
         }
 
-        // Рекурсивный спуск для контейнеров
         if (strcmp(type, "translation_unit") == 0 || 
             strcmp(type, "linkage_specification") == 0 ||
             strcmp(type, "declaration_list") == 0 ||
@@ -317,7 +337,6 @@ public:
             std::vector<std::string> topCommentTexts;
             std::string inlineComment = "";
 
-            // 1. Ищем комментарии НАД сущностью
             for (int i = (int)comments.size() - 1; i >= 0; i--) {
                 const auto& c = comments[i];
                 if (c.endByte < e.startByte) {
@@ -330,8 +349,6 @@ public:
             }
             std::reverse(topCommentTexts.begin(), topCommentTexts.end());
 
-            // 2. Ищем инлайн-комментарий
-            // Приоритет 1: Комментарий ПОСЛЕ конца сущности на той же строке (Вариант A)
             for (const auto& c : comments) {
                 if (c.startLine == e.endLine && c.startByte > e.endByte) {
                     inlineComment = c.text;
@@ -339,7 +356,6 @@ public:
                 }
             }
 
-            // Приоритет 2: Комментарий внутри заголовка функции (перед '{') (Вариант B)
             if (inlineComment.empty() && (e.type == "Function" || e.type == "Method")) {
                 for (const auto& c : comments) {
                     if (c.startLine == e.startLine && c.startByte > e.startByte && c.startByte < e.endByte) {
@@ -349,7 +365,6 @@ public:
                 }
             }
 
-            // 3. Очищаем верхние комментарии с учетом Doxygen
             std::string cleanTop = "";
             bool inBlockComment = false;
             for (const auto& rawComment : topCommentTexts) {
@@ -413,7 +428,7 @@ public:
                 cleanTop.pop_back();
             }
 
-            // 4. Очищаем инлайн
+            // Обработка инлайн-комментария с разбивкой на строки и триммингом
             std::string cleanInline = "";
             if (!inlineComment.empty()) {
                 std::string c = inlineComment;
@@ -425,14 +440,28 @@ public:
                         c = c.substr(0, c.length()-2);
                     }
                 }
-                cleanInline = TrimString(c);
+                
+                std::istringstream iss(c);
+                std::string line;
+                std::vector<std::string> lines;
+                while(std::getline(iss, line)) {
+                    std::string trimmed = TrimString(line);
+                    if (!trimmed.empty()) {
+                        if (trimmed[0] == '*') trimmed = TrimString(trimmed.substr(1));
+                        if (!trimmed.empty()) lines.push_back(trimmed);
+                    }
+                }
+                for (const auto& l : lines) {
+                    cleanInline += l + "\n";
+                }
+                if (!cleanInline.empty()) cleanInline.pop_back(); 
             }
 
-            // 5. Собираем итог
+            // Сборка финального комментария БЕЗ разделителя "|"
             e.comment = "";
             if (!cleanTop.empty()) e.comment += cleanTop;
             if (!cleanInline.empty()) {
-                if (!e.comment.empty()) e.comment += " | ";
+                if (!e.comment.empty()) e.comment += "\n";
                 e.comment += cleanInline;
             }
         }
@@ -447,7 +476,6 @@ std::string GenerateMarkdown(const std::string& filePath, const std::vector<Brie
         std::string prefix = e.prefix;
         std::string name = e.signature;
         
-        // Логика уровней заголовков: # для глобальных, ## для членов классов
         std::string hashes = "#";
         if (e.type == "Method" || e.type == "Field") {
             hashes = "##";
