@@ -1,7 +1,7 @@
 # BriefMaker 🗺️
 **AI-Friendly Code Indexer & AST Summarizer for C++ and JavaScript**
 
-[🇷🇺 Русская версия](#) | [🇬🇧 English](#-briefmaker-ai-friendly-code-indexer--ast-summarizer)
+[🇷🇺 Русская версия](#-проблема) | [🇬🇧 English](#-the-problem)
 
 ---
 
