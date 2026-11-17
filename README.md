@@ -122,7 +122,7 @@ cd js
 npm install --legacy-peer-deps
 ```
 
-That's it! The `briefmaker.js` script is ready to use.
+Now the `briefmaker.js` script is ready to use.
 
 ---
 # 🇷🇺 
@@ -243,7 +243,7 @@ cd js
 npm install --legacy-peer-deps
 ```
 
-Готово! Скрипт `briefmaker.js` готов к использованию.
+После этого скрипт `briefmaker.js` готов к использованию.
 
 ---
 
