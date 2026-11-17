@@ -177,6 +177,10 @@ std::string CleanDoxygenLine(const std::string& line, const Strings& S) {
     std::string l = TrimString(line);
     if (l.empty()) return "";
 
+    // ФИЛЬТР: Игнорируем графические разделители
+    static const std::regex separatorRegex("^[=\\-*#~_]+$");
+    if(std::regex_match(l, separatorRegex)) return "";
+
     static const std::regex briefRegex("^@brief\\s+(.*)", std::regex::icase);
     static const std::regex detailsRegex("^@details\\s+(.*)", std::regex::icase);
     static const std::regex paramRegex("^@param\\s+(\\w+)\\s*(.*)", std::regex::icase);
@@ -655,32 +659,49 @@ public:
                 cleanTop.pop_back();
             }
 
+            // 5. Очистка инлайна
             std::string cleanInline = "";
-            if (!inlineComment.empty()) {
+            if(!inlineComment.empty())
+            {
                 std::string c = inlineComment;
-                if (c.substr(0, 2) == "//") {
+                if(c.substr(0, 2) == "//")
+                {
                     c = c.substr(2);
-                } else if (c.substr(0, 2) == "/*") {
+                }
+                else if(c.substr(0, 2) == "/*")
+                {
                     c = c.substr(2);
-                    if (c.length() >= 2 && c.substr(c.length()-2) == "*/") {
-                        c = c.substr(0, c.length()-2);
+                    if(c.length() >= 2 && c.substr(c.length() - 2) == "*/")
+                    {
+                        c = c.substr(0, c.length() - 2);
                     }
                 }
-                
+
                 std::istringstream iss(c);
                 std::string line;
                 std::vector<std::string> lines;
-                while(std::getline(iss, line)) {
+                while(std::getline(iss, line))
+                {
                     std::string trimmed = TrimString(line);
-                    if (!trimmed.empty()) {
-                        if (trimmed[0] == '*') trimmed = TrimString(trimmed.substr(1));
-                        if (!trimmed.empty()) lines.push_back(trimmed);
+                    if(!trimmed.empty())
+                    {
+                        if(trimmed[0] == '*') trimmed = TrimString(trimmed.substr(1));
+                        // ФИЛЬТР: Игнорируем графические разделители
+                        if(!trimmed.empty())
+                        {
+                            static const std::regex separatorRegex("^[=\\-*#~]+$");
+                            if(!std::regex_match(trimmed, separatorRegex))
+                            {
+                                lines.push_back(trimmed);
+                            }
+                        }
                     }
                 }
-                for (const auto& l : lines) {
+                for(const auto& l : lines)
+                {
                     cleanInline += l + "\n";
                 }
-                if (!cleanInline.empty()) cleanInline.pop_back(); 
+                if(!cleanInline.empty()) cleanInline.pop_back();
             }
 
             e.comment = "";
