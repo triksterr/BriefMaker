@@ -1,5 +1,5 @@
 @echo off
 
-C:\Users\Alex\Documents\prog\BriefMaker\out\build\x64-Debug\BriefMaker.exe %1
+C:\Users\Alex\Documents\prog\BriefMaker\out\build\x64-Debug\BriefMaker.exe %1 -ru
 
-pause
+rem pause
