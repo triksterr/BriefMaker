@@ -1,5 +1,5 @@
 @echo off
 
-node briefmaker.js %1
+node briefmaker.js -ru %1
 
 pause

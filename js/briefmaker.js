@@ -96,6 +96,8 @@ function cleanDoxygenLine(line, S) {
     const l = trimString(line);
     if (!l) return '';
 
+    if (/^[=\-*#~_]+$/.test(l)) return ''; //! ФИЛЬТР: Игнорируем графические разделители (добавили _ )
+
     let m;
     if ((m = l.match(/^@(?:brief|details)\s+(.*)/i))) return m[1];
     if ((m = l.match(/^@param\s+(\w+)\s*(.*)/i))) return `${m[1]}: ${m[2]}`;
@@ -467,21 +469,29 @@ class BriefGenerator {
 
             // 5. Очистка инлайна
             let cleanInline = '';
-            if (inlineComment) {
+            if (inlineComment)
+            {
                 let c = inlineComment;
-                if (c.startsWith('//')) {
+                if (c.startsWith('//'))
+                {
                     c = c.slice(2);
-                } else if (c.startsWith('/*')) {
+                } else if (c.startsWith('/*'))
+                {
                     c = c.slice(2);
                     if (c.endsWith('*/')) c = c.slice(0, -2);
                 }
                 const lines = c.split(/\r?\n/);
                 const processed = [];
-                for (let line of lines) {
+                for (let line of lines)
+                {
                     let trimmed = trimString(line);
-                    if (trimmed) {
+                    if (trimmed)
+                    {
                         if (trimmed.startsWith('*')) trimmed = trimString(trimmed.slice(1));
-                        if (trimmed) processed.push(trimmed);
+                        if (trimmed && !/^[=\-*#~_]+$/.test(trimmed)) //! ФИЛЬТР: Игнорируем графические разделители
+                        {
+                            processed.push(trimmed);
+                        }
                     }
                 }
                 cleanInline = processed.join('\n');

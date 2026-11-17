@@ -1,63 +1,59 @@
-File: briefmaker.js
+Файл: briefmaker.js
 
-# Constant: const fs = require('fs');
-Line: 3
+# Константа: const fs = require('fs');
+Стр: 3
 
-# Constant: const path = require('path');
-Line: 4
+# Константа: const path = require('path');
+Стр: 4
 
-# Constant: const Parser = require('tree-sitter');
-Line: 5
+# Константа: const Parser = require('tree-sitter');
+Стр: 5
 
-# Constant: const Cpp = require('tree-sitter-cpp');
-Line: 6
+# Константа: const Cpp = require('tree-sitter-cpp');
+Стр: 6
 
-# Constant: const JavaScript = require('tree-sitter-javascript');
-Line: 7
+# Константа: const JavaScript = require('tree-sitter-javascript');
+Стр: 7
 
-# Constant: const STRINGS_EN = { fileLabel: 'File: ', classType: 'Class', methodType: 'Method', functionType: 'Function', macroType: 'Macro', constantType: 'Constant', typeAliasType: 'TypeAlias', fieldType: 'Field', lineSingle: 'Line: ', lineRange: 'Lines: ', returns: 'Returns: ', usage: 'Usage: briefmaker <input_file> [output_path] [-ru]', fileNotFound: 'File not found: ', unsupportedExt: 'Unsupported extension: ', briefCreated: 'Brief successfully created: ', error: 'Error: ', langEnabled: '' };
-==========================================
-Lines: 12 - 30
+# Константа: const STRINGS_EN = { fileLabel: 'File: ', classType: 'Class', methodType: 'Method', functionType: 'Function', macroType: 'Macro', constantType: 'Constant', typeAliasType: 'TypeAlias', fieldType: 'Field', lineSingle: 'Line: ', lineRange: 'Lines: ', returns: 'Returns: ', usage: 'Usage: briefmaker <input_file> [output_path] [-ru]', fileNotFound: 'File not found: ', unsupportedExt: 'Unsupported extension: ', briefCreated: 'Brief successfully created: ', error: 'Error: ', langEnabled: '' };
+Стр: 12 - 30
 
-# Constant: const STRINGS_RU = { fileLabel: 'Файл: ', classType: 'Класс', methodType: 'Метод', functionType: 'Функция', macroType: 'Макрос', constantType: 'Константа', typeAliasType: 'Псевдоним типа', fieldType: 'Поле', lineSingle: 'Стр: ', lineRange: 'Стр: ', returns: 'Возвращает: ', usage: 'Использование: briefmaker <входной_файл> [путь_вывода] [-ru]', fileNotFound: 'Файл не найден: ', unsupportedExt: 'Неподдерживаемое расширение: ', briefCreated: 'Бриф успешно создан: ', error: 'Ошибка: ', langEnabled: 'Включён русский язык интерфейса.' };
-Lines: 32 - 50
+# Константа: const STRINGS_RU = { fileLabel: 'Файл: ', classType: 'Класс', methodType: 'Метод', functionType: 'Функция', macroType: 'Макрос', constantType: 'Константа', typeAliasType: 'Псевдоним типа', fieldType: 'Поле', lineSingle: 'Стр: ', lineRange: 'Стр: ', returns: 'Возвращает: ', usage: 'Использование: briefmaker <входной_файл> [путь_вывода] [-ru]', fileNotFound: 'Файл не найден: ', unsupportedExt: 'Неподдерживаемое расширение: ', briefCreated: 'Бриф успешно создан: ', error: 'Ошибка: ', langEnabled: 'Включён русский язык интерфейса.' };
+Стр: 32 - 50
 
-# Function: function readFileToUtf8String(filePath)
-==========================================
-Lines: 55 - 62
+# Функция: function readFileToUtf8String(filePath)
+Стр: 55 - 62
 
-# Function: function trimString(s)
-Lines: 64 - 66
+# Функция: function trimString(s)
+Стр: 64 - 66
 
-# Function: function removeInlineCommentsFromSignature(rawSig)
-Lines: 68 - 93
+# Функция: function removeInlineCommentsFromSignature(rawSig)
+Стр: 68 - 93
 
-# Function: function cleanDoxygenLine(line, S)
-Lines: 95 - 107
+# Функция: function cleanDoxygenLine(line, S)
+Стр: 95 - 109
 
-# Function: function isFunctionDeclaration(node)
-Lines: 109 - 120
+# Функция: function isFunctionDeclaration(node)
+Стр: 111 - 122
 
-# Class: BriefGenerator
-==========================================
-Lines: 125 - 499
+# Класс: BriefGenerator
+Стр: 127 - 509
 
-## Method: BriefGenerator.constructor(S)
-Lines: 126 - 131
+## Метод: BriefGenerator.constructor(S)
+Стр: 128 - 133
 
-## Method: BriefGenerator.collectComments(node)
-Lines: 133 - 146
+## Метод: BriefGenerator.collectComments(node)
+Стр: 135 - 148
 
-## Method: BriefGenerator.processNode(node, currentPrefix)
-Lines: 148 - 376
+## Метод: BriefGenerator.processNode(node, currentPrefix)
+Стр: 150 - 378
 
-## Method: BriefGenerator.attachComments()
-Lines: 378 - 498
+## Метод: BriefGenerator.attachComments()
+Стр: 380 - 508
 
-# Function: function generateMarkdown(filePath, entities, S)
-Lines: 501 - 522
+# Функция: function generateMarkdown(filePath, entities, S)
+Стр: 511 - 532
 
-# Function: function main()
-==========================================
-Lines: 527 - 604
+# Функция: function main()
+Стр: 537 - 614
 
