@@ -42,20 +42,20 @@ async function main() {
     }
 
     let config = null;
-    if (!cliRoot && !cliOut && !cliRu) {
-        const configPaths = [
-            path.join(process.cwd(), configName),
-            path.join(scriptDir, configName)
-        ];
-        for (const cp of configPaths) {
-            if (fs.existsSync(cp)) {
-                console.log(`Найден файл конфигурации: ${cp}`);
-                try {
-                    config = JSON.parse(fs.readFileSync(cp, 'utf8'));
-                } catch (e) {
-                    console.error(`Ошибка парсинга конфига: ${e.message}`);
-                }
+    let configPath = null;
+    const configPaths = [
+        path.join(process.cwd(), configName),
+        path.join(scriptDir, configName)
+    ];
+    for (const cp of configPaths) {
+        if (fs.existsSync(cp)) {
+            try {
+                config = JSON.parse(fs.readFileSync(cp, 'utf8'));
+                configPath = cp;
+                console.log(`Found configuration file: ${cp}`);
                 break;
+            } catch (e) {
+                console.error(`Error parsing config: ${e.message}`);
             }
         }
     }
@@ -63,42 +63,35 @@ async function main() {
     let finalRoot = cliRoot;
     let finalOut = cliOut;
     let finalLang = cliRu ? 'ru' : 'en';
+    let saveNewConfig = false;
 
-    if (config) {
-        if (!finalRoot) finalRoot = config.root;
-        if (!finalOut && config.outDir) finalOut = config.outDir;
+    // Если есть валидный конфиг - используем его автоматически
+    if (config && config.root) {
+        finalRoot = (config.root === ".") ? path.dirname(configPath) : config.root;
+        if (!cliOut && config.outDir) finalOut = config.outDir;
         if (!cliRu && config.lang === 'ru') finalLang = 'ru';
-    }
-
-    if (!finalRoot) {
-        finalRoot = process.cwd();
-        const ans = await askQuestion(`Корень проекта не указан. Использовать текущую папку '${finalRoot}'? (y/n) `);
-        if (ans.toLowerCase() !== 'y') {
-            console.log('Отменено.');
-            process.exit(1);
-        }
-        const saveAns = await askQuestion(`Сохранить эти настройки в '${configName}' для будущих авто-запусков? (y/n) `);
-        if (saveAns.toLowerCase() === 'y') {
-            const configObj = {
-                root: ".",
-                extensions: [".c", ".cpp", ".cc", ".h", ".hpp", ".js", ".jsx", ".ts"],
-                ignore: ["node_modules", "build", "out", "libs", ".git", ".briefs"],
-                lang: finalLang,
-                outDir: null
-            };
-            fs.writeFileSync(path.join(finalRoot, configName), JSON.stringify(configObj, null, 2));
-            console.log('Конфигурация сохранена!');
+    } else {
+        // Конфига нет или он поврежден - интерактивный режим
+        if (!finalRoot) {
+            finalRoot = process.cwd();
+            const confirm = await askQuestion(`Project root not specified. Use current directory '${finalRoot}'? (y/n) `);
+            if (confirm.toLowerCase() !== 'y') {
+                console.log('Cancelled.');
+                process.exit(1);
+            }
+            const saveAns = await askQuestion(`Save these settings to '${configName}'? (y/n) `);
+            if (saveAns.toLowerCase() === 'y') saveNewConfig = true;
         }
     }
 
     finalRoot = path.resolve(finalRoot);
     if (!fs.existsSync(finalRoot)) {
-        console.error(`Неверный путь к корню проекта: ${finalRoot}`);
+        console.error(`Invalid project root path: ${finalRoot}`);
         process.exit(1);
     }
 
     if (isProtectedDir(finalRoot)) {
-        console.error(`ЗАЩИТА: Запрещен запуск в системной директории '${finalRoot}'.`);
+        console.error(`PROTECTION: Running in system directory '${finalRoot}' is prohibited.`);
         process.exit(1);
     }
 
@@ -113,30 +106,36 @@ async function main() {
         isMirror = true;
         mirrorPath = path.isAbsolute(finalOut) ? finalOut : path.join(finalRoot, finalOut);
         if (fs.existsSync(mirrorPath)) {
-            console.log(`Режим Mirror: Полная очистка папки '${mirrorPath}'...`);
+            console.log(`Mirror mode: Cleaning directory '${mirrorPath}'...`);
             fs.rmSync(mirrorPath, { recursive: true, force: true });
         }
         fs.mkdirSync(mirrorPath, { recursive: true });
     }
 
     if (!fs.existsSync(briefmakerScript)) {
-        console.error(`briefmaker.js не найден по пути: '${briefmakerScript}'.`);
+        console.error(`briefmaker.js not found at: '${briefmakerScript}'.`);
         process.exit(1);
     }
 
-    console.log(`Сканирование '${finalRoot}'...`);
+    console.log(`Scanning '${finalRoot}'...`);
     
     function walkDir(dir) {
         let results = [];
-        const list = fs.readdirSync(dir);
+        let list;
+        try {
+            list = fs.readdirSync(dir);
+        } catch (e) {
+            return results;
+        }
+        
         for (const file of list) {
+            if (ignoreDirs.includes(file)) continue; 
+            
             const filePath = path.join(dir, file);
             try {
                 const stat = fs.statSync(filePath);
                 if (stat.isDirectory()) {
-                    if (!ignoreDirs.includes(file)) {
-                        results = results.concat(walkDir(filePath));
-                    }
+                    results = results.concat(walkDir(filePath));
                 } else {
                     if (extensions.includes(path.extname(filePath).toLowerCase())) {
                         results.push(filePath);
@@ -168,7 +167,19 @@ async function main() {
         else errors++;
     }
 
-    console.log(`Готово! Обработано: ${processed}, Ошибок: ${errors}`);
+    if (saveNewConfig) {
+        const configObj = {
+            root: ".",
+            extensions: extensions,
+            ignore: ignoreDirs,
+            lang: finalLang,
+            outDir: finalOut || null
+        };
+        fs.writeFileSync(path.join(process.cwd(), configName), JSON.stringify(configObj, null, 2));
+        console.log('Configuration saved!');
+    }
+
+    console.log(`Done! Processed: ${processed}, Errors: ${errors}`);
 }
 
 main().catch(console.error);

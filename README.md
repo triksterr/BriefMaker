@@ -14,7 +14,7 @@ Feeding a 5,000-line C++ or JavaScript file to an AI just to change one function
 ### 💡 The Solution
 **BriefMaker** is a lightning-fast CLI utility that reads your source code, builds an accurate Abstract Syntax Tree (AST) using [Tree-sitter](https://tree-sitter.github.io/), and generates a lightweight **Table of Contents (`.brief.md`)**.
 
-Instead of reading the whole file, your AI agent reads the brief, understands the architecture, and asks your IDE/Script to inject _only_ the specific lines it needs to modify.
+Instead of reading the whole file, your AI agent reads the brief, understands the architecture, and asks your IDE/Script to inject *only* the specific lines it needs to modify.
 
 The tool is available in **two identical versions**:
 - **C++ version** (`BriefMaker.exe`) — a standalone, ultra-fast executable with zero runtime dependencies.
@@ -24,12 +24,13 @@ The tool is available in **two identical versions**:
 - 🧠 **AI-Optimized Output:** Every class, method, and function includes exact **Start and End line numbers** for precise code patching.
 - 🌳 **100% Accurate Parsing:** Powered by Tree-sitter. No fragile Regex. It perfectly understands nested scopes, macros, and strings.
 - 💬 **Smart Comment Extraction:** Automatically extracts and cleans Doxygen tags (`@brief`, `@param`, `@return`), block comments, and inline comments.
-- 🧹 **Noise Reduction:** Automatically filters out decorative separators (like `// ====`, `// ----`, `// ****`) from comments to keep the brief clean.
+- 🧹 **Noise Reduction:** Automatically filters out decorative separators (like `// ====`, `// ----`) from comments.
 - 🏗️ **Context Aware:** Tracks C++ namespaces/class prefixes (`MyClass::method`) and JS scopes/exports.
-- ⚡ **Zero Runtime Dependencies (C++ version):** Statically linked C++ runtime. Just download the `.exe` and run it anywhere (no `vcruntime140.dll` required).
+- ⚡ **Zero Runtime Dependencies (C++ version):** Statically linked C++ runtime. Just download the `.exe` and run it anywhere.
 - 🌐 **Cross-Platform (Node.js version):** Run on Windows, Linux, or macOS using Node.js.
 - 📦 **Multi-Language:** Supports modern **C++** (classes, macros, templates, `using`) and **JavaScript/TypeScript** (arrow functions, classes, exports).
-- 🔤 **UTF-8 Safe:** Correctly handles files with or without BOM.
+- 🚀 **Mass Generation Scripts:** Included PowerShell and Node.js scripts to index entire projects in one command.
+- 🛡️ **Safety First:** Built-in protection against running in system directories (e.g., `C:\Windows`).
 - 🌍 **Localized Output:** English by default, with a Russian interface and output via the `-ru` flag.
 
 ### 🖼️ Example Output
@@ -67,30 +68,70 @@ Lines: 10
 ```
 *Note how the decorative `// ====` separator is automatically filtered out.*
 
-### 🚀 Usage (C++ Version)
+---
 
+### 🚀 Usage: Single File
+
+**C++ Version (Windows/Linux/macOS binary):**
 ```bash
-# Generate a brief next to the source file (English output)
-BriefMaker.exe path/to/MyClass.cpp
-
-# Specify an output directory
-BriefMaker.exe path/to/script.js out/
-
-# Generate a brief with Russian interface and labels
-BriefMaker.exe path/to/MyClass.cpp -ru
+BriefMaker.exe path/to/MyClass.cpp           # English output
+BriefMaker.exe path/to/MyClass.cpp -ru       # Russian output
+BriefMaker.exe path/to/script.js out/        # Save to specific directory
 ```
 
-### 🚀 Usage (Node.js Version)
-
-The Node.js version has identical logic and CLI flags:
-
+**Node.js Version:**
 ```bash
-# Run directly
 node js/briefmaker.js path/to/MyClass.cpp
-
-# With Russian localization
 node js/briefmaker.js path/to/script.js -ru
 ```
+
+---
+
+### 📂 Usage: Mass Project Indexing
+
+BriefMaker includes powerful scripts (`all-briefs.ps1` / `all-briefs.js`) to scan entire projects, respecting `.gitignore`-like rules and avoiding `node_modules` or build folders.
+
+#### 1. Interactive Mode (First Run)
+Simply run the script without arguments. It will ask for the project root and offer to save a configuration file.
+
+```powershell
+# Windows (PowerShell or CMD via .bat wrapper)
+.\all-briefs.ps1
+# or
+all-briefs.bat
+
+# Cross-platform (Node.js)
+node js/all-briefs.js
+```
+
+#### 2. Mirror Mode (Shadow Directory)
+Use the `-out` flag to generate a clean "mirror" of your project structure containing **only** the brief files. This is ideal for feeding context to AI agents without exposing source code.
+
+```powershell
+.\all-briefs.ps1 -out .briefs
+# Creates a .briefs/ folder mirroring your src/ structure
+```
+
+#### 3. Configuration (`.briefmaker.json`)
+On the first interactive run, the script creates a `.briefmaker.json` file in your project root. Subsequent runs will automatically use these settings (no questions asked), making it perfect for CI/CD or AI-agent automation.
+
+```json
+{
+  "root": ".",
+  "extensions": [".c", ".cpp", ".cc", ".h", ".hpp", ".js", ".jsx", ".ts"],
+  "ignore": ["node_modules", "build", "out", "libs", ".git", ".briefs"],
+  "lang": "en",
+  "outDir": null
+}
+```
+
+#### 4. Clear ALL brief-files in project
+
+Use `utils/del-briefs.bat` conmmsnd from project root.
+
+Start this file from project root or only from source folder of you project.
+
+---
 
 ### 🛠️ Building from Source
 
@@ -99,30 +140,25 @@ node js/briefmaker.js path/to/script.js -ru
 - Node.js 18+ (for Node.js version)
 
 #### C++ Version
-
 ```bash
-# 1. Clone the repository with submodules
-git clone --recursive https://github.com/yourusername/BriefMaker.git
+git clone --recursive https://github.com/triksterr/BriefMaker.git
 cd BriefMaker
-
-# 2. Configure and Build (Release mode)
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
-
-_Note for MSVC users: The `CMakeLists.txt` is configured to statically link the runtime (`/MT`), ensuring the resulting `.exe` is fully portable._
+*Note: The `CMakeLists.txt` is configured to statically link the runtime (`/MT` on MSVC), ensuring the resulting `.exe` is fully portable.*
 
 #### Node.js Version
-
 ```bash
-# 1. Navigate to the js/ directory
 cd js
-
-# 2. Install dependencies (use --legacy-peer-deps to resolve tree-sitter version conflicts)
+# Use --legacy-peer-deps to resolve tree-sitter version conflicts
 npm install --legacy-peer-deps
 ```
 
-Now the `briefmaker.js` script is ready to use.
+
+
+### 🤖 Automated Releases (GitHub Actions)
+This project uses **GitHub Actions** to automatically build and publish binaries for **Windows (x64)**, **macOS (Intel)**, and **macOS (Apple Silicon)** whenever a new version tag (e.g., `v1.0.0`) is pushed. You can download the ready-to-use executables from the [Releases Page](../../releases).
 
 ---
 # 🇷🇺 
@@ -135,7 +171,7 @@ Now the `briefmaker.js` script is ready to use.
 ### 💡 Решение
 **BriefMaker** — это быстрая консольная утилита, которая читает исходный код, строит точное Абстрактное Синтаксическое Дерево (AST) с помощью [Tree-sitter](https://tree-sitter.github.io/) и генерирует легковесное **Оглавление (`.brief.md`)**.
 
-Вместо чтения всего файла, ваш ИИ-агент читает бриф, понимает архитектуру и запрашивает у IDE/скрипта _только_ те конкретные строки, которые нужно изменить.
+Вместо чтения всего файла, ваш ИИ-агент читает бриф, понимает архитектуру и запрашивает у IDE/скрипта *только* те конкретные строки, которые нужно изменить.
 
 Инструмент доступен в **двух идентичных версиях**:
 - **C++ версия** (`BriefMaker.exe`) — автономный, сверхбыстрый исполняемый файл без внешних зависимостей.
@@ -145,111 +181,109 @@ Now the `briefmaker.js` script is ready to use.
 - 🧠 **Оптимизация для ИИ:** Каждый класс, метод и функция сопровождаются точными **номерами начальной и конечной строки** для хирургически точного патчинга кода.
 - 🌳 **100% точность парсинга:** Работает на базе Tree-sitter. Никаких хрупких регулярных выражений. Программа идеально понимает вложенные скоупы, макросы и строковые литералы.
 - 💬 **Умное извлечение комментариев:** Автоматически находит и очищает Doxygen-теги (`@brief`, `@param`, `@return`), блочные и инлайн-комментарии.
-- 🧹 **Устранение шума:** Автоматически фильтрует декоративные разделители (вроде `// ====`, `// ----`, `// ****`) из комментариев, сохраняя бриф чистым.
+- 🧹 **Устранение шума:** Автоматически фильтрует декоративные разделители (вроде `// ====`, `// ----`) из комментариев.
 - 🏗️ **Понимание контекста:** Отслеживает C++ неймспейсы и префиксы классов (`MyClass::method`), а также JS-скоупы и экспорты.
-- ⚡ **Ноль зависимостей при запуске (C++ версия):** Статически слинкованный рантайм C++. Достаточно скачать `.exe` и запустить его где угодно (не требует установки `vcruntime140.dll`).
-- 🌐 **Кроссплатформенность (Node.js версия):** Работает на Windows, Linux и macOS через Node.js.
-- 📦 **Мультиязычность:** Поддерживает современный **C++** (классы, макросы, `using`/`typedef`) и **JavaScript** (стрелочные функции, классы, `export`).
-- 🔤 **Безопасная работа с UTF-8:** Корректно обрабатывает файлы как с BOM, так и без него.
-- 🌍 **Локализованный вывод:** Английский язык по умолчанию, русский интерфейс и метки через флаг `-ru`.
+- ⚡ **Ноль зависимостей при запуске (C++):** Статически слинкованный рантайм C++. Достаточно скачать `.exe` и запустить его где угодно.
+- 🌐 **Кроссплатформенность (Node.js):** Работает на Windows, Linux и macOS через Node.js.
+- 📦 **Мультиязычность:** Поддерживает современный **C++** и **JavaScript/TypeScript**.
+- 🚀 **Скрипты массовой генерации:** Включены PowerShell и Node.js скрипты для индексации целых проектов одной командой.
+- 🛡️ **Безопасность:** Встроенная защита от запуска в системных директориях (например, `C:\Windows`).
+- 🌍 **Локализация:** Английский язык по умолчанию, русский интерфейс и метки через флаг `-ru`.
 
-### 🖼️ Пример работы
+---
 
-**Входной файл (`user.js`):**
-```javascript
-/**
- * Представляет пользователя системы
- * @param {string} name Полное имя пользователя
- */
-class User {
-    // ==========================================
-    constructor(name) { this.name = name; }
-    
-    // Возвращает форматированное приветствие
-    getGreeting() { return `Hello, ${this.name}`; }
+### 🚀 Использование: Одиночный файл
+
+**C++ Версия (Бинарник для Windows/Linux/macOS):**
+```powershell
+BriefMaker.exe path/to/MyClass.cpp           # Английский вывод
+BriefMaker.exe path/to/MyClass.cpp -ru       # Русский вывод
+BriefMaker.exe path/to/script.js out/        # Сохранить в конкретную папку
+```
+
+**Node.js Версия:**
+```powershell
+node js/briefmaker.js path/to/MyClass.cpp
+node js/briefmaker.js path/to/script.js -ru
+```
+
+---
+
+### 📂 Использование: Массовая индексация проекта
+
+BriefMaker включает мощные скрипты (`all-briefs.ps1` / `all-briefs.js`) для сканирования целых проектов, с уважением правил игнорирования (пропуская `node_modules`, `build` и т.д.).
+
+#### 1. Интерактивный режим (Первый запуск)
+Просто запустите скрипт без аргументов. Он спросит путь к корню проекта и предложит сохранить файл конфигурации.
+
+```powershell
+# Windows (PowerShell или CMD через .bat wrapper)
+.\all-briefs.ps1
+# или
+all-briefs.bat
+
+# Кроссплатформенно (Node.js)
+node js/all-briefs.js
+```
+
+#### 2. Режим "Зеркало" (Mirror Mode)
+Используйте флаг `-out`, чтобы создать чистое "зеркало" структуры вашего проекта, содержащее **только** файлы брифов. Это идеально для передачи контекста ИИ-агентам без раскрытия исходного кода.
+
+```powershell
+.\all-briefs.ps1 -out .briefs
+# Создает папку .briefs/, зеркалящую структуру src/
+```
+
+#### 3. Конфигурация (`.briefmaker.json`)
+При первом интерактивном запуске скрипт создает файл `.briefmaker.json` в корне проекта. Последующие запуски будут автоматически использовать эти настройки (без лишних вопросов), что идеально для CI/CD или автоматизации ИИ-агентами.
+
+```json
+{
+  "root": ".",
+  "extensions": [".c", ".cpp", ".cc", ".h", ".hpp", ".js", ".jsx", ".ts"],
+  "ignore": ["node_modules", "build", "out", "libs", ".git", ".briefs"],
+  "lang": "en",
+  "outDir": null
 }
 ```
 
-**Сгенерированный бриф (`user.js.brief.md`):**
-```markdown
-File: user.js
+#### 4. Очистка проекта от брифов. 
 
-# Class: User
-Представляет пользователя системы
-name: Полное имя пользователя
-Стр: 5 - 11
+Команда `utils/del-briefs.bat`  удаляет все .brief.md файлы во всем проекте, если выполнить её из корня проекта.
+Вы также можете очистить бриф-файлы только в выбранной папке и её подпапках, запустив эту команду в этой папке.
 
-## Method: User.constructor(name)
-Стр: 7
-
-## Method: User.getGreeting()
-Возвращает форматированное приветствие
-Стр: 10
-```
-*Обратите внимание, как декоративный разделитель `// ====` автоматически отфильтровывается.*
-
-### 🚀 Использование (C++ версия)
-
-```powershell
-# Создать бриф рядом с исходным файлом с именем MyClass.brief.md (английский)
-BriefMaker.exe path/to/MyClass.cpp
-
-# Указать папку out/ для сохранения брифа script.brief.md
-BriefMaker.exe path/to/script.js out/
-
-# Создать бриф с русским интерфейсом и метками
-BriefMaker.exe path/to/MyClass.cpp -ru
-```
-
-### 🚀 Использование (Node.js версия)
-
-Node.js версия имеет идентичную логику и флаги CLI:
-
-```powershell
-# Запуск напрямую
-node js/briefmaker.js path/to/MyClass.cpp
-
-# С русской локализацией
-node js/briefmaker.js path/to/script.js -ru
-```
+---
 
 ### 🛠️ Сборка из исходников
 
 **Требования:**
-- CMake 3.15+, компилятор с поддержкой C++17 (MSVC, GCC или Clang), Git (для C++ версии)
+- CMake 3.15+, компилятор C++17 (MSVC, GCC или Clang), Git (для C++ версии)
 - Node.js 18+ (для Node.js версии)
 
 #### C++ версия
-
 ```powershell
-# 1. Клонируем репозиторий вместе с субмодулями (Tree-sitter)
-git clone --recursive https://github.com/yourusername/BriefMaker.git
+git clone --recursive https://github.com/triksterr/BriefMaker.git
 cd BriefMaker
-
-# 2. Конфигурируем и собираем (в Release-режиме)
 cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
-
-_Примечание для пользователей MSVC: `CMakeLists.txt` настроен на статическую линковку рантайма (`/MT`), что делает итоговый `.exe` файл полностью автономным и переносимым._
+*Примечание: `CMakeLists.txt` настроен на статическую линковку рантайма (`/MT`), что делает итоговый `.exe` файл полностью автономным.*
 
 #### Node.js версия
-
 ```powershell
-# 1. Переходим в директорию js/
 cd js
-
-# 2. Устанавливаем зависимости (используем --legacy-peer-deps для разрешения конфликтов версий tree-sitter)
+# Используем --legacy-peer-deps для разрешения конфликтов версий tree-sitter
 npm install --legacy-peer-deps
 ```
 
-После этого скрипт `briefmaker.js` готов к использованию.
+### 🤖 Автоматические релизы (GitHub Actions)
+Этот проект использует **GitHub Actions** для автоматической сборки и публикации бинарников для **Windows (x64)**, **macOS (Intel)** и **macOS (Apple Silicon)** при пуше нового тега версии (например, `v1.0.0`). Вы можете скачать готовые исполняемые файлы на [Странице Релизов](../../releases).
 
 ---
 
 ## 🤝 Contributing / Вклад
-Feel free to open issues or submit pull requests if you want to add support for more languages (like Python or Rust) or improve the AST extraction logic!
-_Открывайте Issues или присылайте Pull Request, если хотите добавить поддержку новых языков (например, Python или Rust) или улучшить логику извлечения AST!_
+Feel free to open issues or submit pull requests!
+*Открывайте Issues или присылайте Pull Request!*
 
 ## 📄 License / Лицензия
-MIT License. Free for personal and commercial use. / _Свободно для личного и коммерческого использования._
+MIT License. Free for personal and commercial use. / *Свободно для личного и коммерческого использования.*
