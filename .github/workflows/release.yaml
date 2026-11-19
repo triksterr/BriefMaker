@@ -14,7 +14,7 @@ jobs:
           submodules: recursive
       
       - name: Configure CMake
-        run: cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
         
       - name: Build
         run: cmake --build build --config Release
@@ -22,7 +22,7 @@ jobs:
       - name: Prepare Artifact
         run: |
           mkdir release-assets
-          cp build/Release/BriefMaker.exe release-assets/BriefMaker-win-x64.exe
+          Copy-Item build/Release/BriefMaker.exe release-assets/BriefMaker-win-x64.exe
           
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -31,7 +31,7 @@ jobs:
           path: release-assets/BriefMaker-win-x64.exe
 
   build-macos-x64:
-    runs-on: macos-15  # Обновлено: macos-13 больше не доступен
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,7 +56,7 @@ jobs:
           path: release-assets/BriefMaker-macos-x64
 
   build-macos-arm64:
-    runs-on: macos-15  # Обновлено: macos-14 больше не доступен
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
