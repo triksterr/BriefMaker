@@ -31,7 +31,7 @@ jobs:
           path: release-assets/BriefMaker-win-x64.exe
 
   build-macos-x64:
-    runs-on: macos-13 # Intel x64
+    runs-on: macos-15  # Обновлено: macos-13 больше не доступен
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,14 +56,16 @@ jobs:
           path: release-assets/BriefMaker-macos-x64
 
   build-macos-arm64:
-    runs-on: macos-14 # Apple Silicon (M1/M2/M3)
+    runs-on: macos-15  # Обновлено: macos-14 больше не доступен
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
           
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64
         
       - name: Build
         run: cmake --build build --config Release
