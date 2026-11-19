@@ -286,4 +286,5 @@ Feel free to open issues or submit pull requests!
 *Открывайте Issues или присылайте Pull Request!*
 
 ## 📄 License / Лицензия
-MIT License. Free for personal and commercial use. / *Свободно для личного и коммерческого использования.*
+MIT License. Free for personal and commercial use.
+*Свободно для личного и коммерческого использования.*
