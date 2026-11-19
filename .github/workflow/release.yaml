@@ -1,0 +1,98 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Configure CMake
+        run: cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+        
+      - name: Build
+        run: cmake --build build --config Release
+        
+      - name: Prepare Artifact
+        run: |
+          mkdir release-assets
+          cp build/Release/BriefMaker.exe release-assets/BriefMaker-win-x64.exe
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: release-assets/BriefMaker-win-x64.exe
+
+  build-macos-x64:
+    runs-on: macos-13 # Intel x64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        
+      - name: Build
+        run: cmake --build build --config Release
+        
+      - name: Prepare Artifact
+        run: |
+          mkdir release-assets
+          cp build/BriefMaker release-assets/BriefMaker-macos-x64
+          chmod +x release-assets/BriefMaker-macos-x64
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64-binary
+          path: release-assets/BriefMaker-macos-x64
+
+  build-macos-arm64:
+    runs-on: macos-14 # Apple Silicon (M1/M2/M3)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        
+      - name: Build
+        run: cmake --build build --config Release
+        
+      - name: Prepare Artifact
+        run: |
+          mkdir release-assets
+          cp build/BriefMaker release-assets/BriefMaker-macos-arm64
+          chmod +x release-assets/BriefMaker-macos-arm64
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64-binary
+          path: release-assets/BriefMaker-macos-arm64
+
+  release:
+    needs: [build-windows, build-macos-x64, build-macos-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

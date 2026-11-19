@@ -4,6 +4,10 @@ project(BriefMaker C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# для чистого C-кода Tree-sitter
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 # Если сборка идет не через Visual Studio (например, из консоли через make/ninja),
 # устанавливаем Release как конфигурацию по умолчанию.
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
