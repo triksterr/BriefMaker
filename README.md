@@ -158,7 +158,7 @@ npm install --legacy-peer-deps
 
 
 ### 🤖 Automated Releases (GitHub Actions)
-This project uses **GitHub Actions** to automatically build and publish binaries for **Windows (x64)**, **macOS (Intel)**, and **macOS (Apple Silicon)** whenever a new version tag (e.g., `v1.0.0`) is pushed. You can download the ready-to-use executables from the [Releases Page](../../releases).
+This project uses **GitHub Actions** to automatically build and publish binaries for **Windows (x64)**, **macOS (Intel)**, and **macOS (Apple Silicon)** whenever a new version tag (e.g., `v1.0.1`) is pushed. You can download the ready-to-use executables from the [Releases Page](../../releases).
 
 ---
 # 🇷🇺 
