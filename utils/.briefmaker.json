@@ -1,0 +1,7 @@
+{
+  "root": ".",
+  "extensions": [".c", ".cpp", ".cc", ".h", ".hpp", ".js", ".jsx", ".ts"],
+  "ignore": ["node_modules", "build", "out", "libs", ".git", ".briefs"],
+  "lang": "en",
+  "outDir": "../briefs"
+}

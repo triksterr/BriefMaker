@@ -1,0 +1,1 @@
+BriefMaker.exe %1 -ru
