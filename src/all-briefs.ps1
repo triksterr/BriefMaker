@@ -19,14 +19,14 @@ function Test-ProtectedDir {
     $normalized = ($path.TrimEnd('\', '/')).ToLower()
     if ([string]::IsNullOrEmpty($normalized)) { return $false }
     foreach ($p in $protectedDirs) {
-        $pNorm = $p.ToLower().TrimEnd('\', '/')
-        if ($normalized -eq $pNorm) {
+        if ($normalized -eq $p.ToLower() -or $normalized -eq $p.ToLower().TrimEnd('\','/')) {
             return $true
         }
     }
     return $false
 }
 
+# 1. ВСЕГДА ищем конфиг (независимо от аргументов CLI)
 $config = $null
 $configPath = $null
 $configPaths = @(
@@ -42,27 +42,25 @@ foreach ($cp in $configPaths) {
     }
 }
 
+# 2. Определение параметров (CLI имеет приоритет над конфигом)
 $finalRoot = $ProjectRoot
 $finalOut = $out
 $finalLang = if ($ru) { "ru" } else { "en" }
-
 $saveNewConfig = $false
 
-# Если есть валидный конфиг - используем его автоматически
 if ($config -and $config.root) {
-    # Resolve root relative to config file location
-    if ($config.root -eq ".") {
-        $finalRoot = Split-Path -Parent $configPath
-    } else {
-        $finalRoot = $config.root
+    # Есть валидный конфиг - используем его (CLI переопределяет)
+    if (-not $finalRoot) {
+        if ($config.root -eq ".") {
+            $finalRoot = Split-Path -Parent $configPath
+        } else {
+            $finalRoot = $config.root
+        }
     }
-    
-    # Apply other settings from config (CLI flags take precedence)
     if (-not $out -and $config.outDir) { $finalOut = $config.outDir }
     if (-not $ru -and $config.lang -eq "ru") { $finalLang = "ru" }
-}
-else {
-    # Конфига нет или он поврежден - интерактивный режим
+} else {
+    # Конфига нет - интерактивный режим (только если не передан root явно)
     if (-not $finalRoot) {
         $finalRoot = (Get-Location).Path
         $confirm = Read-Host "Project root not specified. Use current directory '$finalRoot'? (y/n)"
@@ -86,35 +84,21 @@ if (Test-ProtectedDir $finalRoot) {
     exit 1
 }
 
+# 3. Настройки фильтрации (ВСЕГДА применяем из конфига, если есть)
 $extensions = @(".c", ".cpp", ".cc", ".h", ".hpp", ".js", ".jsx", ".ts")
 $ignoreDirs = @("node_modules", "build", "out", "libs", ".git", ".briefs", ".vs", ".vscode")
-if ($config -and $config.extensions) { $extensions = $config.extensions }
-if ($config -and $config.ignore) { $ignoreDirs = $config.ignore }
-
-# Apply config settings (CLI flags take precedence)
-if ($useConfigSettings -and $config) {
-    if (-not $out -and $config.outDir) { $finalOut = $config.outDir }
-    if (-not $ru -and $config.lang -eq "ru") { $finalLang = "ru" }
+if ($config -and $config.extensions) { 
+    $extensions = $config.extensions | ForEach-Object { $_.Trim() }
+}
+if ($config -and $config.ignore) { 
+    $ignoreDirs = $config.ignore | ForEach-Object { $_.Trim() }
 }
 
-$finalRoot = (Resolve-Path $finalRoot -ErrorAction SilentlyContinue).Path
-if (-not $finalRoot) {
-    Write-Error "Invalid project root path."
-    exit 1
-}
+# Отладочный вывод (можно убрать)
+Write-Host "Ignore dirs: [$($ignoreDirs -join ', ')]" -ForegroundColor DarkGray
+Write-Host "Extensions: [$($extensions -join ', ')]" -ForegroundColor DarkGray
 
-if (Test-ProtectedDir $finalRoot) {
-    Write-Error "PROTECTION: Running in system directory '$finalRoot' is prohibited."
-    exit 1
-}
-
-$extensions = @(".c", ".cpp", ".cc", ".h", ".hpp", ".js", ".jsx", ".ts")
-$ignoreDirs = @("node_modules", "build", "out", "libs", ".git", ".briefs", ".vs", ".vscode")
-if ($useConfigSettings -and $config) {
-    if ($config.extensions) { $extensions = $config.extensions }
-    if ($config.ignore) { $ignoreDirs = $config.ignore }
-}
-
+# 4. Режим Mirror (Зеркало)
 $isMirror = $false
 $mirrorPath = $null
 if ($finalOut) {
@@ -137,19 +121,14 @@ if (-not (Test-Path $exePath)) {
     exit 1
 }
 
+# 5. Сканирование и обработка
 Write-Host "Scanning '$finalRoot'..." -ForegroundColor Cyan
-
-# Ищем, где падает игнор. 
-Write-Host "Ignore dirs: [$($ignoreDirs -join ', ')]" -ForegroundColor Cyan
-Write-Host "Extensions: [$($extensions -join ', ')]" -ForegroundColor Cyan
-
 $files = Get-ChildItem -Path $finalRoot -File -Recurse -ErrorAction SilentlyContinue | Where-Object {
     $extMatch = $extensions -contains $_.Extension.ToLower()
     
     $isIgnored = $false
     $relativePath = $_.DirectoryName.Replace($finalRoot, '').Trim('\', '/')
     if ($relativePath) {
-        # Using -split with regex for reliable cross-version PS 5.1 compatibility
         $dirParts = $relativePath -split '[\\/]'
         foreach ($part in $dirParts) {
             if ($ignoreDirs -contains $part) {
@@ -174,7 +153,6 @@ foreach ($file in $files) {
         if (-not (Test-Path $outDir)) {
             New-Item -ItemType Directory -Path $outDir -Force | Out-Null
         }
-        # Pass directory with trailing separator so BriefMaker.exe appends the filename
         $outArg = $outDir + [System.IO.Path]::DirectorySeparatorChar
         
         $argsList = @($inputFile, $outArg)
@@ -196,7 +174,7 @@ if ($saveNewConfig) {
         extensions = $extensions
         ignore = $ignoreDirs
         lang = $finalLang
-        outDir = $finalOut
+        outDir = $null
     }
     $configObj | ConvertTo-Json -Depth 5 | Set-Content (Join-Path (Get-Location) $configName)
     Write-Host "Configuration saved!" -ForegroundColor Green
