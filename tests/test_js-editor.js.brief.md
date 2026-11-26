@@ -29,6 +29,15 @@
 инкремент принудительно перерисовывает sidebar/content (x-effect)
 Стр: 76
 
+## Поле: editorApp.mode = 'global'
+Стр: 77
+
+## Поле: editorApp.lang = 'ru'
+Стр: 78
+
+## Поле: editorApp.theme = 'light'
+Стр: 79
+
 ## Поле: editorApp.translations = {}
 Стр: 80
 
@@ -41,40 +50,58 @@
 ## Поле: editorApp.schema = null
 Стр: 83
 
+## Поле: editorApp.activeSection = 'basic'
+Стр: 84
+
 ## Поле: editorApp.global = { raw: {}, originalRaw: {}, originalText: '{}', comments: {}, originalComments: {}, path: '' }
 Слот конфигурации (по одному на режим global/project). Хранит данные
 файла и снимки для сравнения/сброса и сохранения.
 Стр: 97 - 104
 
-## Поле: editorApp..global.raw = {}
+## Поле: editorApp.global.raw = {}
 Стр: 98
 
-## Поле: editorApp..global.originalRaw = {}
+## Поле: editorApp.global.originalRaw = {}
 Стр: 99
 
-## Поле: editorApp..global.comments = {}
+## Поле: editorApp.global.originalText = '{}'
+Стр: 100
+
+## Поле: editorApp.global.comments = {}
 Стр: 101
 
-## Поле: editorApp..global.originalComments = {}
+## Поле: editorApp.global.originalComments = {}
 Стр: 102
+
+## Поле: editorApp.global.path = ''
+Стр: 103
 
 ## Поле: editorApp.project = { raw: {}, originalRaw: {}, originalText: '{}', comments: {}, originalComments: {}, path: '' }
 Стр: 105 - 112
 
-## Поле: editorApp..project.raw = {}
+## Поле: editorApp.project.raw = {}
 Стр: 106
 
-## Поле: editorApp..project.originalRaw = {}
+## Поле: editorApp.project.originalRaw = {}
 Стр: 107
 
-## Поле: editorApp..project.comments = {}
+## Поле: editorApp.project.originalText = '{}'
+Стр: 108
+
+## Поле: editorApp.project.comments = {}
 Стр: 109
 
-## Поле: editorApp..project.originalComments = {}
+## Поле: editorApp.project.originalComments = {}
 Стр: 110
+
+## Поле: editorApp.project.path = ''
+Стр: 111
 
 ## Поле: editorApp.showComments = {}
 Стр: 114
+
+## Поле: editorApp.modelSearch = ''
+Стр: 115
 
 ## Поле: editorApp.showModelDropdown = false
 Стр: 116
@@ -96,6 +123,9 @@
 
 ## Поле: editorApp.recentProjects = []
 Стр: 122
+
+## Поле: editorApp.homePath = ''
+Стр: 123
 
 ## Поле: editorApp.fieldErrors = {}
 Стр: 124
