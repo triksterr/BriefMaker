@@ -490,8 +490,26 @@ class BriefGenerator {
                 }
             }
             
-            if (isFactory && funcName) {
-                // Это фабрика - извлекаем члены объекта
+            if (isFactory && funcName)
+            {
+                // 1. СНАЧАЛА добавляем саму функцию-фабрику (чтобы ИИ видел точку входа)
+                let sig = '';
+                if (body)
+                {
+                    sig = this.code.substring(startByte, body.startIndex);
+                } else
+                {
+                    sig = this.code.substring(startByte, endByte);
+                }
+                this.entities.push({
+                    type: this.S.functionType,
+                    prefix: currentPrefix,
+                    signature: removeInlineCommentsFromSignature(sig),
+                    comment: '',
+                    startLine, endLine, startByte, endByte
+                });
+
+                // 2. ПОТОМ разбираем её содержимое - извлекаем члены объекта
                 const factoryPrefix = currentPrefix ? `${currentPrefix}.${funcName}` : funcName;
                 this.processObjectLiteral(returnObject, factoryPrefix);
             } else {

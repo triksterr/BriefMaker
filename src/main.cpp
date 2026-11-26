@@ -621,8 +621,30 @@ public:
                 }
             }
             
-            if (isFactory && !funcName.empty()) {
-                // Это фабрика - извлекаем члены объекта
+            if(isFactory && !funcName.empty())
+            {
+                // 1. СНАЧАЛА добавляем саму функцию-фабрику
+                std::string sig = "";
+                if(!ts_node_is_null(body))
+                {
+                    sig = code.substr(startByte, ts_node_start_byte(body) - startByte);
+                }
+                else
+                {
+                    sig = GetNodeText(node, code);
+                }
+
+                BriefEntity factoryFunc;
+                factoryFunc.type = S.functionType;
+                factoryFunc.prefix = currentPrefix;
+                factoryFunc.signature = RemoveInlineCommentsFromSignature(sig);
+                factoryFunc.startLine = startLine;
+                factoryFunc.endLine = endLine;
+                factoryFunc.startByte = startByte;
+                factoryFunc.endByte = endByte;
+                entities.push_back(factoryFunc);
+
+                // 2. ПОТОМ разбираем её содержимое
                 std::string factoryPrefix = currentPrefix.empty() ? funcName : currentPrefix + "." + funcName;
                 ProcessObjectLiteral(returnObject, factoryPrefix);
             } else {
