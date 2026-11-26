@@ -118,6 +118,10 @@ async function main() {
     }
 
     console.log(`Scanning '${finalRoot}'...`);
+	
+	//! Отладочная информация - Ищем, где падает игнор. 
+	console.log(`Ignore dirs: [${ignoreDirs.join(', ')}]`);
+	console.log(`Extensions: [${extensions.join(', ')}]`);
     
     function walkDir(dir) {
         let results = [];

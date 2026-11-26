@@ -138,6 +138,11 @@ if (-not (Test-Path $exePath)) {
 }
 
 Write-Host "Scanning '$finalRoot'..." -ForegroundColor Cyan
+
+# Ищем, где падает игнор. 
+Write-Host "Ignore dirs: [$($ignoreDirs -join ', ')]" -ForegroundColor Cyan
+Write-Host "Extensions: [$($extensions -join ', ')]" -ForegroundColor Cyan
+
 $files = Get-ChildItem -Path $finalRoot -File -Recurse -ErrorAction SilentlyContinue | Where-Object {
     $extMatch = $extensions -contains $_.Extension.ToLower()
     
