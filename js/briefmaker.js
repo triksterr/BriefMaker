@@ -227,7 +227,7 @@ class BriefGenerator {
             });
 
             // 2. ПОТОМ рекурсивно обрабатываем содержимое
-            const newPrefix = prefix ? `${prefix}.${key}` : key;
+            const newPrefix = prefix ? `${prefix}${key}` : key;
             this.processObjectLiteral(valueNode, newPrefix, depth + 1);
         }
         else
@@ -267,22 +267,27 @@ class BriefGenerator {
             {
                 let key = '';
                 let valueNode = null;
+                let foundColon = false;
 
                 for (let j = 0; j < child.childCount; j++)
                 {
                     const pairChild = child.child(j);
-                    if (pairChild.type === 'property_identifier' ||
-                        pairChild.type === 'string' ||
-                        pairChild.type === 'identifier')
+
+                    if (pairChild.type === ':')
                     {
+                        foundColon = true;
+                    } else if (!foundColon)
+                    {
+                        // Это ключ (до двоеточия)
                         key = this.code.substring(pairChild.startIndex, pairChild.endIndex);
-                        // Убираем кавычки, если это строковый ключ
+                        // Убираем кавычки, если ключ строковый
                         if (key.startsWith('"') || key.startsWith("'"))
                         {
                             key = key.slice(1, -1);
                         }
-                    } else if (pairChild.type !== ':')
+                    } else
                     {
+                        // Это значение (после двоеточия)
                         valueNode = pairChild;
                     }
                 }

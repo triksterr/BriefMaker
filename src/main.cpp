@@ -313,8 +313,8 @@ public:
             parentField.endByte = ts_node_end_byte(parentNode);
             entities.push_back(parentField);
 
-            // 2. ПОТОМ рекурсивно обрабатываем содержимое (с точкой в префиксе!)
-            std::string newPrefix = prefix.empty() ? key : prefix + "." + key;
+            // 2. ПОТОМ рекурсивно обрабатываем содержимое
+            std::string newPrefix = prefix.empty() ? key : prefix + key;
             ProcessObjectLiteral(valueNode, newPrefix, depth + 1);
         }
         else
@@ -356,6 +356,7 @@ public:
             {
                 std::string key = "";
                 TSNode valueNode = { 0 };
+                bool foundColon = false;
 
                 uint32_t pairCount = ts_node_child_count(child);
                 for(uint32_t j = 0; j < pairCount; j++)
@@ -363,10 +364,13 @@ public:
                     TSNode pairChild = ts_node_child(child, j);
                     const char* pairChildType = ts_node_type(pairChild);
 
-                    if(strcmp(pairChildType, "property_identifier") == 0 ||
-                        strcmp(pairChildType, "string") == 0 ||
-                        strcmp(pairChildType, "identifier") == 0)
+                    if(strcmp(pairChildType, ":") == 0)
                     {
+                        foundColon = true;
+                    }
+                    else if(!foundColon)
+                    {
+                    // Это ключ (до двоеточия)
                         key = GetNodeText(pairChild, code);
                         // Убираем кавычки
                         if(key.length() >= 2 && (key.front() == '"' || key.front() == '\''))
@@ -374,8 +378,9 @@ public:
                             key = key.substr(1, key.length() - 2);
                         }
                     }
-                    else if(strcmp(pairChildType, ":") != 0)
+                    else
                     {
+                                     // Это значение (после двоеточия)
                         valueNode = pairChild;
                     }
                 }
