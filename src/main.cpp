@@ -16,11 +16,7 @@ extern "C" const TSLanguage *tree_sitter_javascript(void);
 
 namespace fs = std::filesystem;
 
-// ==========================================
-// ЛОКАЛИЗАЦИЯ (i18n)
-// ==========================================
 struct Strings {
-    // Markdown labels
     std::string fileLabel;
     std::string classType;
     std::string methodType;
@@ -29,15 +25,14 @@ struct Strings {
     std::string constantType;
     std::string typeAliasType;
     std::string fieldType;
+    std::string getterType;
+    std::string setterType;
     
-    // Line numbers
-    std::string lineSingle; // e.g. "Line: " or "Стр: "
-    std::string lineRange;  // e.g. "Lines: " or "Стр: "
+    std::string lineSingle;
+    std::string lineRange;
     
-    // Doxygen
-    std::string returns;    // "Returns: " or "Возвращает: "
+    std::string returns;
     
-    // Console messages
     std::string usage;
     std::string fileNotFound;
     std::string unsupportedExt;
@@ -49,6 +44,7 @@ struct Strings {
 const Strings STRINGS_EN = {
     "File: ",
     "Class", "Method", "Function", "Macro", "Constant", "TypeAlias", "Field",
+    "Method (getter)", "Method (setter)",
     "Line: ", "Lines: ",
     "Returns: ",
     "Usage: BriefMaker.exe <input_file> [output_path] [-ru]",
@@ -56,12 +52,13 @@ const Strings STRINGS_EN = {
     "Unsupported extension: ",
     "Brief successfully created: ",
     "Error: ",
-    "" // No message for default language
+    ""
 };
 
 const Strings STRINGS_RU = {
     "Файл: ",
     "Класс", "Метод", "Функция", "Макрос", "Константа", "Псевдоним типа", "Поле",
+    "Метод (геттер)", "Метод (сеттер)",
     "Стр: ", "Стр: ",
     "Возвращает: ",
     "Использование: BriefMaker.exe <входной_файл> [путь_вывода] [-ru]",
@@ -72,9 +69,6 @@ const Strings STRINGS_RU = {
     "Включён русский язык интерфейса."
 };
 
-// ==========================================
-// СТРУКТУРЫ ДАННЫХ
-// ==========================================
 struct BriefEntity {
     std::string type;      
     std::string prefix;    
@@ -94,9 +88,6 @@ struct Comment {
     uint32_t endByte;
 };
 
-// ==========================================
-// УТИЛИТЫ РАБОТЫ С ФАЙЛАМИ И СТРОКАМИ
-// ==========================================
 std::string ReadFileToUtf8String(const fs::path& filePath) {
     std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
@@ -177,9 +168,8 @@ std::string CleanDoxygenLine(const std::string& line, const Strings& S) {
     std::string l = TrimString(line);
     if (l.empty()) return "";
 
-    // ФИЛЬТР: Игнорируем графические разделители
-    static const std::regex separatorRegex("^[=\\-*#~_]+$");
-    if(std::regex_match(l, separatorRegex)) return "";
+    static const std::regex separatorRegex("^[=\\-*#~]+$");
+    if (std::regex_match(l, separatorRegex)) return "";
 
     static const std::regex briefRegex("^@brief\\s+(.*)", std::regex::icase);
     static const std::regex detailsRegex("^@details\\s+(.*)", std::regex::icase);
@@ -222,9 +212,6 @@ bool IsFunctionDeclaration(TSNode node, const std::string& code) {
     return false;
 }
 
-// ==========================================
-// ГЛАВНЫЙ КЛАСС-ПАРСЕР
-// ==========================================
 class BriefGenerator {
 public:
     std::vector<BriefEntity> entities;
@@ -247,6 +234,168 @@ public:
         uint32_t count = ts_node_child_count(node);
         for (uint32_t i = 0; i < count; i++) {
             CollectComments(ts_node_child(node, i));
+        }
+    }
+
+    void ProcessObjectMember(const std::string& key, TSNode valueNode,
+        const std::string& prefix, TSNode parentNode,
+        int depth, bool isGetter = false, bool isSetter = false)
+    {
+        const char* valueType = ts_node_type(valueNode);
+
+        if(strcmp(valueType, "method_definition") == 0 ||
+            strcmp(valueType, "function_expression") == 0 ||
+            strcmp(valueType, "arrow_function") == 0 ||
+            strcmp(valueType, "generator_function") == 0)
+        {
+
+            std::string sig = "";
+            TSNode body = { 0 };
+            uint32_t methodCount = ts_node_child_count(valueNode);
+            for(uint32_t k = 0; k < methodCount; k++)
+            {
+                TSNode methodChild = ts_node_child(valueNode, k);
+                if(strcmp(ts_node_type(methodChild), "statement_block") == 0)
+                {
+                    body = methodChild;
+                    break;
+                }
+            }
+
+            if(!ts_node_is_null(body))
+            {
+                sig = code.substr(ts_node_start_byte(valueNode),
+                    ts_node_start_byte(body) - ts_node_start_byte(valueNode));
+            }
+            else
+            {
+                sig = GetNodeText(valueNode, code);
+            }
+
+            sig = RemoveInlineCommentsFromSignature(sig);
+
+            size_t parenIdx = sig.find('(');
+            if(parenIdx != std::string::npos)
+            {
+                sig = key + sig.substr(parenIdx);
+            }
+            else
+            {
+                sig = key + "()";
+            }
+
+            BriefEntity e;
+            if(isGetter) e.type = S.getterType;
+            else if(isSetter) e.type = S.setterType;
+            else e.type = S.methodType;
+
+            e.prefix = prefix;
+            e.signature = sig;
+            e.startLine = ts_node_start_point(parentNode).row + 1;
+            e.endLine = ts_node_end_point(parentNode).row + 1;
+            e.startByte = ts_node_start_byte(parentNode);
+            e.endByte = ts_node_end_byte(parentNode);
+            entities.push_back(e);
+        }
+        else if(strcmp(valueType, "object") == 0)
+        {
+            std::string newPrefix = prefix.empty() ? key : prefix + key;
+            ProcessObjectLiteral(valueNode, newPrefix, depth + 1);
+        }
+        else
+        {
+            std::string valueText = GetNodeText(valueNode, code);
+            valueText = RemoveInlineCommentsFromSignature(valueText);
+
+            BriefEntity e;
+            e.type = S.fieldType;
+            e.prefix = prefix;
+            e.signature = key + " = " + valueText;
+            e.startLine = ts_node_start_point(parentNode).row + 1;
+            e.endLine = ts_node_end_point(parentNode).row + 1;
+            e.startByte = ts_node_start_byte(parentNode);
+            e.endByte = ts_node_end_byte(parentNode);
+            entities.push_back(e);
+        }
+    }
+
+    void ProcessObjectLiteral(TSNode objectNode, const std::string& prefix, int depth = 0)
+    {
+        if(depth > 5) return;
+
+        // Нормализуем префикс: добавляем точку, если не пустой
+        std::string normalizedPrefix = prefix;
+        if(!normalizedPrefix.empty() && normalizedPrefix.back() != '.')
+        {
+            normalizedPrefix += ".";
+        }
+
+        uint32_t count = ts_node_child_count(objectNode);
+        for(uint32_t i = 0; i < count; i++)
+        {
+            TSNode child = ts_node_child(objectNode, i);
+            const char* childType = ts_node_type(child);
+
+            // СЛУЧАЙ 1: Обычная пара key: value
+            if(strcmp(childType, "pair") == 0)
+            {
+                std::string key = "";
+                TSNode valueNode = { 0 };
+
+                uint32_t pairCount = ts_node_child_count(child);
+                for(uint32_t j = 0; j < pairCount; j++)
+                {
+                    TSNode pairChild = ts_node_child(child, j);
+                    const char* pairChildType = ts_node_type(pairChild);
+
+                    if(strcmp(pairChildType, "property_identifier") == 0 ||
+                        strcmp(pairChildType, "string") == 0 ||
+                        strcmp(pairChildType, "identifier") == 0)
+                    {
+                        key = GetNodeText(pairChild, code);
+                        // Убираем кавычки
+                        if(key.length() >= 2 && (key.front() == '"' || key.front() == '\''))
+                        {
+                            key = key.substr(1, key.length() - 2);
+                        }
+                    }
+                    else if(strcmp(pairChildType, ":") != 0)
+                    {
+                        valueNode = pairChild;
+                    }
+                }
+
+                if(!key.empty() && !ts_node_is_null(valueNode))
+                {
+                    ProcessObjectMember(key, valueNode, normalizedPrefix, child, depth);
+                }
+            }
+            // СЛУЧАЙ 2: Shorthand-метод напрямую
+            else if(strcmp(childType, "method_definition") == 0)
+            {
+                std::string methodName = "";
+                bool isGetter = false;
+                bool isSetter = false;
+
+                uint32_t methodCount = ts_node_child_count(child);
+                for(uint32_t j = 0; j < methodCount; j++)
+                {
+                    TSNode mChild = ts_node_child(child, j);
+                    std::string text = GetNodeText(mChild, code);
+                    if(text == "get") isGetter = true;
+                    else if(text == "set") isSetter = true;
+                    else if(strcmp(ts_node_type(mChild), "property_identifier") == 0 ||
+                        strcmp(ts_node_type(mChild), "identifier") == 0)
+                    {
+                        if(methodName.empty()) methodName = text;
+                    }
+                }
+
+                if(!methodName.empty())
+                {
+                    ProcessObjectMember(methodName, child, normalizedPrefix, child, depth, isGetter, isSetter);
+                }
+            }
         }
     }
 
@@ -434,32 +583,67 @@ public:
             entities.push_back(e);
         }
         else if (strcmp(type, "function_declaration") == 0) {
-            std::string sig = "";
+            std::string funcName = "";
             TSNode body = {0};
             uint32_t count = ts_node_child_count(node);
+            
             for (uint32_t i = 0; i < count; i++) {
                 TSNode child = ts_node_child(node, i);
-                if (strcmp(ts_node_type(child), "statement_block") == 0) {
+                const char* childType = ts_node_type(child);
+                if (strcmp(childType, "identifier") == 0) {
+                    funcName = GetNodeText(child, code);
+                }
+                if (strcmp(childType, "statement_block") == 0) {
                     body = child;
-                    break;
                 }
             }
             
+            // Проверяем, возвращает ли функция объект (фабрика)
+            bool isFactory = false;
+            TSNode returnObject = {0};
+            
             if (!ts_node_is_null(body)) {
-                sig = code.substr(startByte, ts_node_start_byte(body) - startByte);
-            } else {
-                sig = GetNodeText(node, code);
+                uint32_t bodyCount = ts_node_child_count(body);
+                for (uint32_t i = 0; i < bodyCount; i++) {
+                    TSNode bodyChild = ts_node_child(body, i);
+                    if (strcmp(ts_node_type(bodyChild), "return_statement") == 0) {
+                        uint32_t returnCount = ts_node_child_count(bodyChild);
+                        for (uint32_t j = 0; j < returnCount; j++) {
+                            TSNode returnChild = ts_node_child(bodyChild, j);
+                            if (strcmp(ts_node_type(returnChild), "object") == 0) {
+                                isFactory = true;
+                                returnObject = returnChild;
+                                break;
+                            }
+                        }
+                    }
+                    if (isFactory) break;
+                }
             }
             
-            BriefEntity e;
-            e.type = S.functionType;
-            e.prefix = currentPrefix;
-            e.signature = RemoveInlineCommentsFromSignature(sig);
-            e.startLine = startLine;
-            e.endLine = endLine;
-            e.startByte = startByte;
-            e.endByte = endByte;
-            entities.push_back(e);
+            if (isFactory && !funcName.empty()) {
+                // Это фабрика - извлекаем члены объекта
+                std::string factoryPrefix = currentPrefix.empty() ? funcName : currentPrefix + "." + funcName;
+                ProcessObjectLiteral(returnObject, factoryPrefix);
+            } else {
+                // Обычная функция
+                std::string sig = "";
+                if (!ts_node_is_null(body)) {
+                    sig = code.substr(startByte, ts_node_start_byte(body) - startByte);
+                } else {
+                    sig = GetNodeText(node, code);
+                }
+                
+                BriefEntity e;
+                e.type = S.functionType;
+                e.prefix = currentPrefix;
+                e.signature = RemoveInlineCommentsFromSignature(sig);
+                e.startLine = startLine;
+                e.endLine = endLine;
+                e.startByte = startByte;
+                e.endByte = endByte;
+                entities.push_back(e);
+            }
         }
         else if (strcmp(type, "lexical_declaration") == 0 || strcmp(type, "variable_declaration") == 0) {
             uint32_t count = ts_node_child_count(node);
@@ -543,7 +727,6 @@ public:
             }
         }
 
-        // ========== Контейнеры ==========
         if (strcmp(type, "translation_unit") == 0 || 
             strcmp(type, "linkage_specification") == 0 ||
             strcmp(type, "declaration_list") == 0 ||
@@ -659,49 +842,37 @@ public:
                 cleanTop.pop_back();
             }
 
-            // 5. Очистка инлайна
             std::string cleanInline = "";
-            if(!inlineComment.empty())
-            {
+            if (!inlineComment.empty()) {
                 std::string c = inlineComment;
-                if(c.substr(0, 2) == "//")
-                {
+                if (c.substr(0, 2) == "//") {
                     c = c.substr(2);
-                }
-                else if(c.substr(0, 2) == "/*")
-                {
+                } else if (c.substr(0, 2) == "/*") {
                     c = c.substr(2);
-                    if(c.length() >= 2 && c.substr(c.length() - 2) == "*/")
-                    {
-                        c = c.substr(0, c.length() - 2);
+                    if (c.length() >= 2 && c.substr(c.length()-2) == "*/") {
+                        c = c.substr(0, c.length()-2);
                     }
                 }
-
+                
                 std::istringstream iss(c);
                 std::string line;
                 std::vector<std::string> lines;
-                while(std::getline(iss, line))
-                {
+                while(std::getline(iss, line)) {
                     std::string trimmed = TrimString(line);
-                    if(!trimmed.empty())
-                    {
-                        if(trimmed[0] == '*') trimmed = TrimString(trimmed.substr(1));
-                        // ФИЛЬТР: Игнорируем графические разделители
-                        if(!trimmed.empty())
-                        {
+                    if (!trimmed.empty()) {
+                        if (trimmed[0] == '*') trimmed = TrimString(trimmed.substr(1));
+                        if (!trimmed.empty()) {
                             static const std::regex separatorRegex("^[=\\-*#~]+$");
-                            if(!std::regex_match(trimmed, separatorRegex))
-                            {
+                            if (!std::regex_match(trimmed, separatorRegex)) {
                                 lines.push_back(trimmed);
                             }
                         }
                     }
                 }
-                for(const auto& l : lines)
-                {
+                for (const auto& l : lines) {
                     cleanInline += l + "\n";
                 }
-                if(!cleanInline.empty()) cleanInline.pop_back();
+                if (!cleanInline.empty()) cleanInline.pop_back(); 
             }
 
             e.comment = "";
@@ -723,7 +894,8 @@ std::string GenerateMarkdown(const std::string& filePath, const std::vector<Brie
         std::string name = e.signature;
         
         std::string hashes = "#";
-        if (e.type == S.methodType || e.type == S.fieldType) {
+        if (e.type == S.methodType || e.type == S.fieldType || 
+            e.type == S.getterType || e.type == S.setterType) {
             hashes = "##";
         }
 
@@ -746,13 +918,9 @@ std::string GenerateMarkdown(const std::string& filePath, const std::vector<Brie
     return md.str();
 }
 
-// ==========================================
-// MAIN
-// ==========================================
 int main(int argc, char* argv[]) {
     std::setlocale(LC_ALL, ".65001");
 
-    // Умный парсер аргументов: ищет флаг -ru в любой позиции
     std::string inputPathStr;
     std::string outputPathStr;
     bool isRussian = false;
@@ -840,5 +1008,5 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    return 0; 
+    return 0;
 }

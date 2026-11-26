@@ -18,6 +18,8 @@ const STRINGS_EN = {
     constantType: 'Constant',
     typeAliasType: 'TypeAlias',
     fieldType: 'Field',
+    getterType: 'Method (getter)',
+    setterType: 'Method (setter)',
     lineSingle: 'Line: ',
     lineRange: 'Lines: ',
     returns: 'Returns: ',
@@ -38,6 +40,8 @@ const STRINGS_RU = {
     constantType: 'Константа',
     typeAliasType: 'Псевдоним типа',
     fieldType: 'Поле',
+    getterType: 'Метод (геттер)',
+    setterType: 'Метод (сеттер)',
     lineSingle: 'Стр: ',
     lineRange: 'Стр: ',
     returns: 'Возвращает: ',
@@ -54,7 +58,6 @@ const STRINGS_RU = {
 // ==========================================
 function readFileToUtf8String(filePath) {
     let content = fs.readFileSync(filePath, 'utf8');
-    // Удаляем BOM, если он есть
     if (content.charCodeAt(0) === 0xFEFF) {
         content = content.slice(1);
     }
@@ -96,7 +99,8 @@ function cleanDoxygenLine(line, S) {
     const l = trimString(line);
     if (!l) return '';
 
-    if (/^[=\-*#~_]+$/.test(l)) return ''; // ФИЛЬТР: Игнорируем графические разделители (добавили _ )
+    // ФИЛЬТР: Игнорируем графические разделители
+    if (/^[=\-*#~]+$/.test(l)) return '';
 
     let m;
     if ((m = l.match(/^@(?:brief|details)\s+(.*)/i))) return m[1];
@@ -144,6 +148,159 @@ class BriefGenerator {
         }
         for (let i = 0; i < node.childCount; i++) {
             this.collectComments(node.child(i));
+        }
+    }
+
+    // НОВЫЙ МЕТОД: Рекурсивная обработка литерала объекта (для фабрик Alpine-стиля) -  обработка члена объекта (метод/поле/вложенный объект)
+    processObjectMember(key, valueNode, prefix, parentNode, depth, isGetter = false, isSetter = false)
+    {
+        const valueType = valueNode.type;
+
+        if (valueType === 'method_definition' ||
+            valueType === 'function_expression' ||
+            valueType === 'arrow_function' ||
+            valueType === 'generator_function')
+        {
+
+            let sig = '';
+            let body = null;
+            for (let k = 0; k < valueNode.childCount; k++)
+            {
+                const mChild = valueNode.child(k);
+                if (mChild.type === 'statement_block')
+                {
+                    body = mChild;
+                    break;
+                }
+            }
+
+            if (body)
+            {
+                sig = this.code.substring(valueNode.startIndex, body.startIndex);
+            } else
+            {
+                sig = this.code.substring(valueNode.startIndex, valueNode.endIndex);
+            }
+
+            sig = removeInlineCommentsFromSignature(sig);
+
+            // Извлекаем только параметры, отбрасывая async/get/set/имя
+            const parenIdx = sig.indexOf('(');
+            if (parenIdx !== -1)
+            {
+                sig = key + sig.substring(parenIdx);
+            } else
+            {
+                sig = key + '()';
+            }
+
+            let type = this.S.methodType;
+            if (isGetter) type = this.S.getterType;
+            else if (isSetter) type = this.S.setterType;
+
+            this.entities.push({
+                type: type,
+                prefix: prefix,
+                signature: sig,
+                comment: '',
+                startLine: parentNode.startPosition.row + 1,
+                endLine: parentNode.endPosition.row + 1,
+                startByte: parentNode.startIndex,
+                endByte: parentNode.endIndex
+            });
+        }
+        else if (valueType === 'object')
+        {
+            // Вложенный объект — рекурсия
+            const newPrefix = prefix ? `${prefix}.${key}` : key;
+            this.processObjectLiteral(valueNode, newPrefix, depth + 1);
+        }
+        else
+        {
+            // Обычное поле
+            let valueText = this.code.substring(valueNode.startIndex, valueNode.endIndex);
+            valueText = removeInlineCommentsFromSignature(valueText);
+
+            this.entities.push({
+                type: this.S.fieldType,
+                prefix: prefix,
+                signature: `${key} = ${valueText}`,
+                comment: '',
+                startLine: parentNode.startPosition.row + 1,
+                endLine: parentNode.endPosition.row + 1,
+                startByte: parentNode.startIndex,
+                endByte: parentNode.endIndex
+            });
+        }
+    }
+
+    // ОБНОВЛЁННЫЙ метод: рекурсивная обработка литерала объекта
+    processObjectLiteral(objectNode, prefix, depth = 0)
+    {
+        if (depth > 5) return;
+
+        // Нормализуем префикс: всегда заканчивается точкой (если не пустой)
+        const normalizedPrefix = prefix ? (prefix.endsWith('.') ? prefix : prefix + '.') : '';
+
+        for (let i = 0; i < objectNode.childCount; i++)
+        {
+            const child = objectNode.child(i);
+            const childType = child.type;
+
+            // ===== СЛУЧАЙ 1: Обычная пара key: value =====
+            if (childType === 'pair')
+            {
+                let key = '';
+                let valueNode = null;
+
+                for (let j = 0; j < child.childCount; j++)
+                {
+                    const pairChild = child.child(j);
+                    if (pairChild.type === 'property_identifier' ||
+                        pairChild.type === 'string' ||
+                        pairChild.type === 'identifier')
+                    {
+                        key = this.code.substring(pairChild.startIndex, pairChild.endIndex);
+                        // Убираем кавычки, если это строковый ключ
+                        if (key.startsWith('"') || key.startsWith("'"))
+                        {
+                            key = key.slice(1, -1);
+                        }
+                    } else if (pairChild.type !== ':')
+                    {
+                        valueNode = pairChild;
+                    }
+                }
+
+                if (key && valueNode)
+                {
+                    this.processObjectMember(key, valueNode, normalizedPrefix, child, depth);
+                }
+            }
+            // ===== СЛУЧАЙ 2: Shorthand-метод напрямую (async init() {...}, get foo() {...}) =====
+            else if (childType === 'method_definition')
+            {
+                let methodName = '';
+                let isGetter = false;
+                let isSetter = false;
+
+                for (let j = 0; j < child.childCount; j++)
+                {
+                    const mChild = child.child(j);
+                    const text = this.code.substring(mChild.startIndex, mChild.endIndex);
+                    if (text === 'get') isGetter = true;
+                    else if (text === 'set') isSetter = true;
+                    else if (mChild.type === 'property_identifier' || mChild.type === 'identifier')
+                    {
+                        if (!methodName) methodName = text;
+                    }
+                }
+
+                if (methodName)
+                {
+                    this.processObjectMember(methodName, child, normalizedPrefix, child, depth, isGetter, isSetter);
+                }
+            }
         }
     }
 
@@ -200,7 +357,7 @@ class BriefGenerator {
                     break;
                 }
             }
-            if (body && !body.isNull) {
+            if (body) {
                 sig = this.code.substring(startByte, body.startIndex);
             } else {
                 sig = this.code.substring(startByte, endByte);
@@ -275,7 +432,7 @@ class BriefGenerator {
                 this.processNode(node.child(i), newPrefix);
             }
         }
-        else if (type === 'method_definition' || type === 'function_declaration') {
+        else if (type === 'method_definition') {
             let sig = '';
             let body = null;
             for (let i = 0; i < node.childCount; i++) {
@@ -285,18 +442,74 @@ class BriefGenerator {
                     break;
                 }
             }
-            if (body && !body.isNull) {
+            if (body) {
                 sig = this.code.substring(startByte, body.startIndex);
             } else {
                 sig = this.code.substring(startByte, endByte);
             }
             this.entities.push({
-                type: type === 'method_definition' ? this.S.methodType : this.S.functionType,
+                type: this.S.methodType,
                 prefix: currentPrefix,
                 signature: removeInlineCommentsFromSignature(sig),
                 comment: '',
                 startLine, endLine, startByte, endByte
             });
+        }
+        else if (type === 'function_declaration') {
+            let funcName = '';
+            let body = null;
+            
+            for (let i = 0; i < node.childCount; i++) {
+                const child = node.child(i);
+                if (child.type === 'identifier') {
+                    funcName = this.code.substring(child.startIndex, child.endIndex);
+                }
+                if (child.type === 'statement_block') {
+                    body = child;
+                }
+            }
+            
+            // Проверяем, возвращает ли функция объект (фабрика)
+            let isFactory = false;
+            let returnObject = null;
+            
+            if (body) {
+                for (let i = 0; i < body.childCount; i++) {
+                    const bodyChild = body.child(i);
+                    if (bodyChild.type === 'return_statement') {
+                        for (let j = 0; j < bodyChild.childCount; j++) {
+                            const returnChild = bodyChild.child(j);
+                            if (returnChild.type === 'object') {
+                                isFactory = true;
+                                returnObject = returnChild;
+                                break;
+                            }
+                        }
+                    }
+                    if (isFactory) break;
+                }
+            }
+            
+            if (isFactory && funcName) {
+                // Это фабрика - извлекаем члены объекта
+                const factoryPrefix = currentPrefix ? `${currentPrefix}.${funcName}` : funcName;
+                this.processObjectLiteral(returnObject, factoryPrefix);
+            } else {
+                // Обычная функция
+                let sig = '';
+                if (body) {
+                    sig = this.code.substring(startByte, body.startIndex);
+                } else {
+                    sig = this.code.substring(startByte, endByte);
+                }
+                this.entities.push({
+                    type: this.S.functionType,
+                    prefix: currentPrefix,
+                    signature: removeInlineCommentsFromSignature(sig),
+                    comment: '',
+                    startLine, endLine, startByte, endByte
+                });
+            }
         }
         else if (type === 'lexical_declaration' || type === 'variable_declaration') {
             let hasFunction = false;
@@ -332,7 +545,7 @@ class BriefGenerator {
                                 valueNode = subChild;
                             }
                         }
-                        if (valueNode && !valueNode.isNull) {
+                        if (valueNode) {
                             let params = '';
                             for (let k = 0; k < valueNode.childCount; k++) {
                                 const vChild = valueNode.child(k);
@@ -469,27 +682,22 @@ class BriefGenerator {
 
             // 5. Очистка инлайна
             let cleanInline = '';
-            if (inlineComment)
-            {
+            if (inlineComment) {
                 let c = inlineComment;
-                if (c.startsWith('//'))
-                {
+                if (c.startsWith('//')) {
                     c = c.slice(2);
-                } else if (c.startsWith('/*'))
-                {
+                } else if (c.startsWith('/*')) {
                     c = c.slice(2);
                     if (c.endsWith('*/')) c = c.slice(0, -2);
                 }
                 const lines = c.split(/\r?\n/);
                 const processed = [];
-                for (let line of lines)
-                {
+                for (let line of lines) {
                     let trimmed = trimString(line);
-                    if (trimmed)
-                    {
+                    if (trimmed) {
                         if (trimmed.startsWith('*')) trimmed = trimString(trimmed.slice(1));
-                        if (trimmed && !/^[=\-*#~_]+$/.test(trimmed)) // ФИЛЬТР: Игнорируем графические разделители
-                        {
+                        // ФИЛЬТР: Игнорируем графические разделители
+                        if (trimmed && !/^[=\-*#~]+$/.test(trimmed)) {
                             processed.push(trimmed);
                         }
                     }
@@ -512,7 +720,9 @@ function generateMarkdown(filePath, entities, S) {
     let md = `${S.fileLabel}${filePath}\n\n`;
     
     for (const e of entities) {
-        const hashes = (e.type === S.methodType || e.type === S.fieldType) ? '##' : '#';
+        const isMethod = (e.type === S.methodType || e.type === S.fieldType || 
+                          e.type === S.getterType || e.type === S.setterType);
+        const hashes = isMethod ? '##' : '#';
 
         if (e.type === S.macroType) {
             md += `${hashes} ${e.type} ${e.signature}\n`;
