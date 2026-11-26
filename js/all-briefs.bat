@@ -1,5 +1,6 @@
 @echo off
+chcp 65001 >nul
 
-node all-briefs.js %*
+node %~dp0all-briefs.js %*
 
 REM pause

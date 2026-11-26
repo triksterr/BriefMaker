@@ -299,7 +299,22 @@ public:
         }
         else if(strcmp(valueType, "object") == 0)
         {
-            std::string newPrefix = prefix.empty() ? key : prefix + key;
+            // 1. СНАЧАЛА создаём запись для родительского поля
+            std::string valueText = GetNodeText(valueNode, code);
+            valueText = RemoveInlineCommentsFromSignature(valueText);
+
+            BriefEntity parentField;
+            parentField.type = S.fieldType;
+            parentField.prefix = prefix;
+            parentField.signature = key + " = " + valueText;
+            parentField.startLine = ts_node_start_point(parentNode).row + 1;
+            parentField.endLine = ts_node_end_point(parentNode).row + 1;
+            parentField.startByte = ts_node_start_byte(parentNode);
+            parentField.endByte = ts_node_end_byte(parentNode);
+            entities.push_back(parentField);
+
+            // 2. ПОТОМ рекурсивно обрабатываем содержимое (с точкой в префиксе!)
+            std::string newPrefix = prefix.empty() ? key : prefix + "." + key;
             ProcessObjectLiteral(valueNode, newPrefix, depth + 1);
         }
         else

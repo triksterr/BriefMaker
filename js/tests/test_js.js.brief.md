@@ -1,39 +1,39 @@
-File: test_js.js
+Файл: test_js.js
 
-# Constant: const MAX_USERS = 100;
+# Константа: const MAX_USERS = 100;
 Глобальная константа
 Инлайн к константе
-Line: 6
+Стр: 6
 
-# Function: function greetUser(name)
+# Функция: function greetUser(name)
 Обычная глобальная функция
-Lines: 12 - 14
+Стр: 12 - 14
 
-# Function: calculateSum(a, b) =>
+# Функция: calculateSum(a, b) =>
 Стрелочная функция
-Lines: 17 - 19
+Стр: 17 - 19
 
-# Class: User
+# Класс: User
 Класс пользователя
-Lines: 24 - 41
+Стр: 24 - 41
 
-## Method: User.constructor(name)
+## Метод: User.constructor(name)
 Конструктор
-Lines: 29 - 31
+Стр: 29 - 31
 
-## Method: User.getName()
+## Метод: User.getName()
 Метод получения имени
-Lines: 34 - 36
+Стр: 34 - 36
 
-## Method: User.static staticMethod()
-Lines: 38 - 40
+## Метод: User.static staticMethod()
+Стр: 38 - 40
 
-# Constant: const exportedVar = 42;
-Line: 43
+# Константа: const exportedVar = 42;
+Стр: 43
 
-# Class: DefaultClass
-Lines: 45 - 47
+# Класс: DefaultClass
+Стр: 45 - 47
 
-## Method: DefaultClass.method()
-Line: 46
+## Метод: DefaultClass.method()
+Стр: 46
 

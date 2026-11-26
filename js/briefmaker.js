@@ -211,7 +211,22 @@ class BriefGenerator {
         }
         else if (valueType === 'object')
         {
-            // Вложенный объект — рекурсия
+            // 1. СНАЧАЛА создаём запись для родительского поля
+            let valueText = this.code.substring(valueNode.startIndex, valueNode.endIndex);
+            valueText = removeInlineCommentsFromSignature(valueText);
+
+            this.entities.push({
+                type: this.S.fieldType,
+                prefix: prefix,
+                signature: `${key} = ${valueText}`,
+                comment: '',
+                startLine: parentNode.startPosition.row + 1,
+                endLine: parentNode.endPosition.row + 1,
+                startByte: parentNode.startIndex,
+                endByte: parentNode.endIndex
+            });
+
+            // 2. ПОТОМ рекурсивно обрабатываем содержимое
             const newPrefix = prefix ? `${prefix}.${key}` : key;
             this.processObjectLiteral(valueNode, newPrefix, depth + 1);
         }
